@@ -364,39 +364,14 @@
       "monthlyLimit": 4000000
     }
   ],
-  "reminders": [
-    {
-      "id": "rem_1",
-      "title": "قسط وام بانک رسالت و ازدواج",
-      "amount": 3200000,
-      "dueDate": "1403/08/25",
-      "category": "installment",
-      "person": "shared",
-      "isPaid": false,
-      "note": "کسر خودکار از حساب ملت هوتن"
-    },
-    {
-      "id": "rem_2",
-      "title": "اجاره و شارژ ماهانه آپارتمان",
-      "amount": 9500000,
-      "dueDate": "1403/09/01",
-      "category": "rent",
-      "person": "shared",
-      "isPaid": false,
-      "note": "واریز به حساب صاحب‌خانه"
-    },
-    {
-      "id": "rem_3",
-      "title": "تسویه اسنپ‌پی (خرید قسطی پوشاک)",
-      "amount": 1450000,
-      "dueDate": "1403/08/29",
-      "category": "debt",
-      "person": "fatemeh",
-      "isPaid": false,
-      "note": "قسط سوم اسنپ‌پی فاطمه"
-    }
+  "reminders": [],
+  "dismissedReminderIds": [
+    "rem_1",
+    "rem_2",
+    "rem_3"
   ],
-  "updatedAt": 1793903882481,
+  "importedSmsHashes": [],
+  "updatedAt": 1793906082762,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
@@ -404,7 +379,7 @@
     "currencyUnit": "تومان",
     "darkMode": true,
     "themeMode": "system",
-    "colorTheme": "ocean",
+    "colorTheme": "turquoise",
     "pinCode": "",
     "monthlyTotalBudget": 28000000,
     "githubSync": {
@@ -414,7 +389,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793903894056
+      "lastSyncedAt": 1793906083569
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
