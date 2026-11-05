@@ -10,6 +10,7 @@ import {
   GitHubSyncConfig,
 } from '../types';
 import { CircularIcon, AVAILABLE_ICONS, IconName } from './CircularIcon';
+import { PWAInstallButton } from './PWAInstallButton';
 import { formatMoney, toEnglishDigits, toPersianDigits } from '../utils/persian';
 import { createPartnerMagicLink, detectGitHubPagesRepo } from '../utils/githubSync';
 
@@ -1177,9 +1178,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
-          {/* Manual File Export / Import for Offline Backup */}
+          {/* Manual File Export / Import & APK / PWA Installation Card */}
           <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-4 h-fit">
-            <div className="flex items-center gap-3">
+            <PWAInstallButton
+              repoOwner={settings.githubSync?.repoOwner}
+              repoName={settings.githubSync?.repoName}
+              variant="settings"
+            />
+
+            <div className="flex items-center gap-3 pt-2">
               <CircularIcon name="download" size="md" color="#0ea5e9" />
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">

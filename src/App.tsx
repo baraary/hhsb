@@ -9,6 +9,7 @@ import { StatsView } from './components/StatsView';
 import { ArchiveView } from './components/ArchiveView';
 import { SettingsView } from './components/SettingsView';
 import { TransactionModal } from './components/TransactionModal';
+import { PWAInstallButton, OfflineIndicator } from './components/PWAInstallButton';
 import { toEnglishDigits } from './utils/persian';
 import {
   detectGitHubPagesRepo,
@@ -605,8 +606,13 @@ export default function App() {
             ))}
           </nav>
 
-          {/* Zone 3: 1 Primary Action CTA */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* Zone 3: Install App / APK + Primary Action CTA */}
+          <div className="flex items-center gap-2 shrink-0">
+            <PWAInstallButton
+              repoOwner={state.settings.githubSync?.repoOwner}
+              repoName={state.settings.githubSync?.repoName}
+              variant="header"
+            />
             <button
               type="button"
               onClick={() => {
@@ -620,6 +626,8 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      <OfflineIndicator />
 
       {/* Main Content Area with Swipe Gesture Support */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pt-5 overflow-x-hidden">
