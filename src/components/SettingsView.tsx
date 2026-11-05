@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { CircularIcon, AVAILABLE_ICONS, IconName } from './CircularIcon';
 import { formatMoney, toEnglishDigits, toPersianDigits } from '../utils/persian';
+import { createPartnerMagicLink, detectGitHubPagesRepo } from '../utils/githubSync';
 
 interface SettingsViewProps {
   state: AppState;
@@ -23,7 +24,9 @@ interface SettingsViewProps {
   onImportState: (newState: AppState) => void;
   onResetDefaults: () => void;
   onManualSyncNow: () => Promise<void>;
+  onLockAppNow?: () => void;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'error';
+  syncErrorMessage?: string;
 }
 
 const COLOR_THEMES: { id: ColorThemeId; name: string; hex: string }[] = [
@@ -65,7 +68,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onImportState,
   onResetDefaults,
   onManualSyncNow,
+  onLockAppNow,
   syncStatus,
+  syncErrorMessage,
 }) => {
   const { settings, categories, tags, budgets } = state;
 
@@ -86,8 +91,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [tagName, setTagName] = useState('');
   const [tagColor, setTagColor] = useState('#10b981');
 
-  // Optional GitHub Repo direct config (expandable only for admin if needed)
-  const [showAdvancedGitHub, setShowAdvancedGitHub] = useState(false);
+  // PIN & Profile Save Feedback
+  const [pinDraft, setPinDraft] = useState<string>(settings.pinCode || '');
+  const [pinSavedToast, setPinSavedToast] = useState<string>('');
+
+  // GitHub Sync Feedback & Magic Link
+  const [ghSavedToast, setGhSavedToast] = useState<string>('');
+  const [magicLinkCopied, setMagicLinkCopied] = useState<boolean>(false);
 
   const [importMessage, setImportMessage] = useState('');
 
@@ -529,23 +539,81 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                  رمز ۴ رقمی ورود (اختیاری)
+                  رمز ۴ رقمی ورود به برنامه
                 </label>
-                <input
-                  type="text"
-                  dir="ltr"
-                  maxLength={4}
-                  placeholder="خالی = بدون قفل"
-                  value={settings.pinCode}
-                  onChange={(e) =>
-                    onUpdateSettings({
-                      pinCode: toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4),
-                    })
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-center text-slate-900 dark:text-white"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    dir="ltr"
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="مثلاً: 1375"
+                    value={pinDraft}
+                    onChange={(e) =>
+                      setPinDraft(
+                        toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4)
+                      )
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-center text-slate-900 dark:text-white"
+                  />
+                  {settings.pinCode && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPinDraft('');
+                        onUpdateSettings({ pinCode: '' });
+                        setPinSavedToast('قفل رمز ۴ رقمی غیرفعال شد.');
+                        setTimeout(() => setPinSavedToast(''), 3500);
+                      }}
+                      className="px-2.5 py-2.5 rounded-xl bg-rose-500/10 text-rose-500 text-[11px] font-extrabold cursor-pointer shrink-0"
+                    >
+                      حذف رمز
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* Explicit Save PIN & Lock Action Buttons */}
+            <div className="pt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const cleanPin = toEnglishDigits(pinDraft).replace(/\D/g, '').slice(0, 4);
+                  if (cleanPin.length > 0 && cleanPin.length < 4) {
+                    setPinSavedToast('رمز ورود باید دقیقاً ۴ رقم باشد.');
+                    setTimeout(() => setPinSavedToast(''), 3500);
+                    return;
+                  }
+                  onUpdateSettings({ pinCode: cleanPin });
+                  setPinSavedToast(
+                    cleanPin
+                      ? `رمز ۴ رقمی (${toPersianDigits(cleanPin)}) با موفقیت ذخیره شد ✓`
+                      : 'تنظیمات بدون رمز ورود ذخیره شد ✓'
+                  );
+                  setTimeout(() => setPinSavedToast(''), 4000);
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-xs"
+              >
+                ذخیره رمز و مشخصات ✓
+              </button>
+
+              {settings.pinCode && onLockAppNow && (
+                <button
+                  type="button"
+                  onClick={onLockAppNow}
+                  className="py-2.5 px-3.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer whitespace-nowrap"
+                >
+                  قفل کردن برنامه الان 🔒
+                </button>
+              )}
+            </div>
+
+            {pinSavedToast && (
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold text-center">
+                {pinSavedToast}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -949,106 +1017,163 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Zero-Token Automatic Sync Card */}
           <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-3">
                 <CircularIcon name="refresh" size="md" color="#10b981" />
                 <div>
                   <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                    ذخیره لوکال + همگام‌سازی خودکار دوطرفه
+                    همگام‌سازی خودکار دوطرفه روی گیت‌هاب (GitHub Pages)
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    بدون نیاز به وارد کردن هیچ توکن یا کدی در گوشی {settings.fatemehName}
+                    توکن را فقط یک‌بار در گوشی خودتان ذخیره کنید؛ گوشی {settings.fatemehName} خودکار وصل می‌شود
                   </p>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={onManualSyncNow}
-                className="px-3.5 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer whitespace-nowrap"
+                onClick={async () => {
+                  await onManualSyncNow();
+                  setGhSavedToast('همگام‌سازی با گیت‌هاب انجام شد ✓');
+                  setTimeout(() => setGhSavedToast(''), 3500);
+                }}
+                className="px-3.5 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer whitespace-nowrap shrink-0"
               >
                 {syncStatus === 'syncing' ? 'در حال سینک...' : 'همگام‌سازی الان ↻'}
               </button>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/70 text-xs text-slate-600 dark:text-slate-300 space-y-2 leading-relaxed">
-              <p className="font-bold text-slate-900 dark:text-white">
-                چطور بدون توکن بین گوشی هوتن و فاطمه سینک می‌شود؟
-              </p>
-              <p>
-                ۱. تمام تغییرات شما در لحظه به صورت پیش‌فرض در حافظه لوکال گوشی (`LocalStorage`) ذخیره می‌شوند تا برنامه حتی بدون اینترنت هم کار کند.
-              </p>
-              <p>
-                ۲. همزمان، برنامه به صورت خودکار دیتابیس مشترک سرور و فایل ریپازیتوری گیت‌هاب (`data/hamhesab-db.json`) را بروزرسانی می‌کند؛ بنابراین وقتی {settings.fatemehName} لینک برنامه را باز کند، بدون نیاز به هیچ توکن یا عددی تمام تراکنش‌ها، کارت‌ها و بودجه‌ها را به صورت خودکار دریافت و ثبت می‌کند.
-              </p>
-            </div>
+            {/* Direct GitHub Connection Form (Always Visible with Save Button) */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    نام کاربری گیت‌هاب (Owner)
+                  </label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    placeholder={detectGitHubPagesRepo().repoOwner || 'hootan'}
+                    value={settings.githubSync?.repoOwner || ''}
+                    onChange={(e) =>
+                      handleGitHubSyncField({ repoOwner: e.target.value.trim() })
+                    }
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    نام ریپازیتوری (مثلاً hhsb)
+                  </label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    placeholder={detectGitHubPagesRepo().repoName || 'hhsb'}
+                    value={settings.githubSync?.repoName || ''}
+                    onChange={(e) =>
+                      handleGitHubSyncField({ repoName: e.target.value.trim() })
+                    }
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
 
-            {/* Optional GitHub Repository Auto-Commit Configuration (Set once by Hootan on Server) */}
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => setShowAdvancedGitHub(!showAdvancedGitHub)}
-                className="text-xs font-bold theme-text hover:underline cursor-pointer"
-              >
-                {showAdvancedGitHub
-                  ? 'بستن تنظیمات اتصال مستقیم به ریپازیتوری گیت‌هاب ▲'
-                  : 'تنظیمات اتصال مستقیم ریپازیتوری گیت‌هاب (فقط یک‌بار توسط هوتن) ▼'}
-              </button>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                  توکن دسترسی گیت‌هاب (Personal Access Token با دسترسی repo)
+                </label>
+                <input
+                  type="password"
+                  dir="ltr"
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                  value={settings.githubSync?.token || ''}
+                  onChange={(e) =>
+                    handleGitHubSyncField({ token: e.target.value.trim() })
+                  }
+                  className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  نکته: این توکن به صورت رمزنگاری‌شده (`syncVault`) در فایل دیتابیس گیت‌هاب ذخیره می‌شود تا گیت‌هاب آن را باطل نکند و گوشی {settings.fatemehName} هم به صورت خودکار و بدون نیاز به وارد کردن توکن به آن متصل شود!
+                </span>
+              </div>
 
-              {showAdvancedGitHub && (
-                <div className="mt-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    اگر این مشخصات را یک‌بار وارد کنید، روی سرور ذخیره می‌شود و هر تغییری که شما یا فاطمه ثبت کنید، به صورت خودکار داخل ریپازیتوری گیت‌هاب شما هم Commit می‌شود (بدون اینکه توکن روی گوشی فاطمه نمایش داده شود):
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                        نام کاربری گیت‌هاب (Owner)
-                      </label>
-                      <input
-                        type="text"
-                        dir="ltr"
-                        placeholder="hootan"
-                        value={settings.githubSync?.repoOwner || ''}
-                        onChange={(e) =>
-                          handleGitHubSyncField({ repoOwner: e.target.value.trim() })
-                        }
-                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                        نام ریپازیتوری (Repo Name)
-                      </label>
-                      <input
-                        type="text"
-                        dir="ltr"
-                        placeholder="hamhesab"
-                        value={settings.githubSync?.repoName || ''}
-                        onChange={(e) =>
-                          handleGitHubSyncField({ repoName: e.target.value.trim() })
-                        }
-                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                      توکن گیت‌هاب (فقط یک‌بار روی سرور ذخیره و مخفی می‌شود)
-                    </label>
-                    <input
-                      type="password"
-                      dir="ltr"
-                      placeholder="ghp_... (در صورت ذخیره قبلی خالی بگذارید)"
-                      value={settings.githubSync?.token || ''}
-                      onChange={(e) =>
-                        handleGitHubSyncField({ token: e.target.value.trim() })
-                      }
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono"
-                    />
-                  </div>
+              {/* Save & Connect Button + Partner Magic Link Button */}
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const auto = detectGitHubPagesRepo();
+                    const owner = settings.githubSync?.repoOwner || auto.repoOwner;
+                    const repo = settings.githubSync?.repoName || auto.repoName;
+                    handleGitHubSyncField({
+                      enabled: true,
+                      repoOwner: owner,
+                      repoName: repo,
+                    });
+                    setGhSavedToast('در حال ذخیره و ارسال دیتابیس به گیت‌هاب...');
+                    await onManualSyncNow();
+                    setGhSavedToast(
+                      'تنظیمات ذخیره شد و دیتابیس با گیت‌هاب همگام‌سازی گردید ✓'
+                    );
+                    setTimeout(() => setGhSavedToast(''), 5000);
+                  }}
+                  className="flex-1 py-2.5 px-4 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-sm"
+                >
+                  ذخیره توکن و اتصال به گیت‌هاب ✓
+                </button>
+
+                {settings.githubSync?.token && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const auto = detectGitHubPagesRepo();
+                      const link = createPartnerMagicLink({
+                        enabled: true,
+                        repoOwner: settings.githubSync?.repoOwner || auto.repoOwner,
+                        repoName: settings.githubSync?.repoName || auto.repoName,
+                        branch: settings.githubSync?.branch || 'main',
+                        filePath: settings.githubSync?.filePath || 'data/hamhesab-db.json',
+                        token: settings.githubSync?.token || '',
+                      });
+                      navigator.clipboard?.writeText(link);
+                      setMagicLinkCopied(true);
+                      setTimeout(() => setMagicLinkCopied(false), 4000);
+                    }}
+                    className="py-2.5 px-3.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer whitespace-nowrap"
+                  >
+                    {magicLinkCopied
+                      ? 'لینک اختصاصی فاطمه کپی شد ✓'
+                      : `کپی لینک ورود خودکار برای ${settings.fatemehName} 🔗`}
+                  </button>
+                )}
+              </div>
+
+              {ghSavedToast && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold text-center">
+                  {ghSavedToast}
                 </div>
               )}
+
+              {syncStatus === 'error' && syncErrorMessage && (
+                <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-bold text-center">
+                  {syncErrorMessage}
+                </div>
+              )}
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/70 text-xs text-slate-600 dark:text-slate-300 space-y-1.5 leading-relaxed">
+              <p className="font-bold text-slate-900 dark:text-white">
+                آیا لازم است توکن را در گوشی {settings.fatemehName} هم وارد کنم؟ خیر!
+              </p>
+              <p>
+                ۱. کافی است فقط **یک‌بار** توکن گیت‌هاب را در کادر بالا وارد کرده و دکمه **«ذخیره توکن و اتصال به گیت‌هاب ✓»** را بزنید.
+              </p>
+              <p>
+                ۲. برنامه توکن را به صورت رمزنگاری‌شده (`syncVault`) در فایل دیتابیس ریپازیتوری شما ذخیره می‌کند. وقتی {settings.fatemehName} آدرس سایت گیت‌هاب شما را باز کند، گوشی او به صورت خودکار کلید رمزنگاری‌شده را دریافت کرده و بدون نیاز به تایپ هیچ توکنی، دوطرفه سینک می‌شود!
+              </p>
+              <p>
+                ۳. همچنین دکمه **«کپی لینک ورود خودکار برای {settings.fatemehName} 🔗»** در بالا قرار داده شده که اگر ریپازیتوری شما Private است، با فرستادن آن لینک در تلگرام/واتساپ برای {settings.fatemehName}، با یک کلیک گوشی او هم متصل می‌شود.
+              </p>
             </div>
           </div>
 

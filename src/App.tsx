@@ -10,6 +10,12 @@ import { ArchiveView } from './components/ArchiveView';
 import { SettingsView } from './components/SettingsView';
 import { TransactionModal } from './components/TransactionModal';
 import { toEnglishDigits } from './utils/persian';
+import {
+  detectGitHubPagesRepo,
+  consumePartnerMagicLinkFromHash,
+  pushStateToGitHubDirect,
+  pullStateFromGitHubDirect,
+} from './utils/githubSync';
 
 const STORAGE_KEY = 'hamhesab_hootan_fatemeh_v2';
 
@@ -30,10 +36,16 @@ const TABS: NavTab[] = [
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => {
+    const autoRepo = detectGitHubPagesRepo();
+    const magicLinkConfig = consumePartnerMagicLinkFromHash();
+
     try {
-      const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('hamhesab_hootan_fatemeh_v1');
+      const saved =
+        localStorage.getItem(STORAGE_KEY) ||
+        localStorage.getItem('hamhesab_hootan_fatemeh_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
+        const existingSync = parsed.settings?.githubSync || {};
         return {
           ...INITIAL_STATE,
           ...parsed,
@@ -44,7 +56,18 @@ export default function App() {
             ...(parsed.settings || {}),
             githubSync: {
               ...INITIAL_STATE.settings.githubSync,
-              ...(parsed.settings?.githubSync || {}),
+              ...existingSync,
+              repoOwner:
+                magicLinkConfig?.repoOwner ||
+                existingSync.repoOwner ||
+                autoRepo.repoOwner ||
+                '',
+              repoName:
+                magicLinkConfig?.repoName ||
+                existingSync.repoName ||
+                autoRepo.repoName ||
+                '',
+              token: magicLinkConfig?.token || existingSync.token || '',
             },
           },
         };
@@ -52,7 +75,19 @@ export default function App() {
     } catch {
       // ignore storage errors
     }
-    return INITIAL_STATE;
+
+    return {
+      ...INITIAL_STATE,
+      settings: {
+        ...INITIAL_STATE.settings,
+        githubSync: {
+          ...INITIAL_STATE.settings.githubSync!,
+          repoOwner: magicLinkConfig?.repoOwner || autoRepo.repoOwner || '',
+          repoName: magicLinkConfig?.repoName || autoRepo.repoName || '',
+          token: magicLinkConfig?.token || '',
+        },
+      },
+    };
   });
 
   const [activeTabIndex, setActiveTabIndex] = useState<number>(0);
@@ -60,6 +95,7 @@ export default function App() {
   const [isTxModalOpen, setIsTxModalOpen] = useState<boolean>(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  const [syncErrorMessage, setSyncErrorMessage] = useState<string>('');
 
   // PIN Lock State
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => !state.settings.pinCode);
@@ -80,28 +116,113 @@ export default function App() {
     }
   }, [state]);
 
-  // 2. Push to Server & GitHub automatically whenever state is modified locally
-  const pushStateToRemote = useCallback(async (currentState: AppState) => {
-    try {
+  // 2. Push to GitHub Directly (for GitHub Pages) AND/OR Server API automatically
+  const pushStateToRemote = useCallback(
+    async (currentState: AppState): Promise<{ ok: boolean; error?: string }> => {
       setSyncStatus('syncing');
-      const res = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: currentState }),
-      });
-      if (res.ok) {
-        setSyncStatus('synced');
-      } else {
-        setSyncStatus('idle');
-      }
-    } catch {
-      setSyncStatus('idle');
-    }
-  }, []);
+      setSyncErrorMessage('');
 
-  // 3. Pull latest state from Server / GitHub on load and periodically (Zero-token experience for Fatemeh & Hootan)
+      // A) Direct Browser-to-GitHub API sync (works on GitHub Pages without any backend!)
+      const hasGitHubToken = Boolean(currentState.settings.githubSync?.token?.trim());
+      if (hasGitHubToken) {
+        const ghResult = await pushStateToGitHubDirect(currentState);
+        if (ghResult.ok) {
+          setSyncStatus('synced');
+          return { ok: true };
+        } else if (ghResult.error && ghResult.error !== 'missing_credentials') {
+          setSyncStatus('error');
+          setSyncErrorMessage(ghResult.error);
+          return { ok: false, error: ghResult.error };
+        }
+      }
+
+      // B) Fallback/parallel push to backend server (/api/sync) when running on Cloud Run / Node server
+      try {
+        const res = await fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state: currentState }),
+        });
+        if (res.ok) {
+          setSyncStatus('synced');
+          return { ok: true };
+        }
+      } catch {
+        // Static GitHub Pages has no /api/sync
+      }
+
+      setSyncStatus('idle');
+      return { ok: false };
+    },
+    []
+  );
+
+  // 3. Pull latest state from GitHub Repository Directly (Zero-token experience for Fatemeh!) or Server
   const pullStateFromRemote = useCallback(async () => {
     try {
+      // A) First try pulling directly from GitHub Repo (works on GitHub Pages!)
+      const ghPull = await pullStateFromGitHubDirect(state);
+      if (ghPull.ok && ghPull.remoteState) {
+        const remoteData = ghPull.remoteState;
+        setState((prev) => {
+          const remoteUpdated = remoteData.updatedAt || 0;
+          const localUpdated = prev.updatedAt || 0;
+          const autoRepo = detectGitHubPagesRepo();
+          const bestToken =
+            prev.settings.githubSync?.token?.trim() || ghPull.recoveredToken || '';
+
+          // Even if timestamps are equal, if Fatemeh's phone didn't have the token yet and we recovered it from syncVault, save it!
+          if (remoteUpdated > localUpdated) {
+            isApplyingRemoteRef.current = true;
+            return {
+              ...prev,
+              ...remoteData,
+              settings: {
+                ...prev.settings,
+                ...(remoteData.settings || {}),
+                githubSync: {
+                  ...INITIAL_STATE.settings.githubSync!,
+                  ...(prev.settings.githubSync || {}),
+                  ...(remoteData.settings?.githubSync || {}),
+                  enabled: true,
+                  repoOwner:
+                    prev.settings.githubSync?.repoOwner ||
+                    remoteData.settings?.githubSync?.repoOwner ||
+                    autoRepo.repoOwner ||
+                    '',
+                  repoName:
+                    prev.settings.githubSync?.repoName ||
+                    remoteData.settings?.githubSync?.repoName ||
+                    autoRepo.repoName ||
+                    '',
+                  token: bestToken,
+                },
+              },
+            };
+          } else if (!prev.settings.githubSync?.token && bestToken) {
+            isApplyingRemoteRef.current = true;
+            return {
+              ...prev,
+              settings: {
+                ...prev.settings,
+                githubSync: {
+                  ...prev.settings.githubSync!,
+                  repoOwner:
+                    prev.settings.githubSync?.repoOwner || autoRepo.repoOwner || '',
+                  repoName:
+                    prev.settings.githubSync?.repoName || autoRepo.repoName || '',
+                  token: bestToken,
+                },
+              },
+            };
+          }
+          return prev;
+        });
+        setSyncStatus('synced');
+        return;
+      }
+
+      // B) Try /api/sync if running on Cloud Run server
       const res = await fetch('/api/sync');
       if (res.ok) {
         const data = await res.json();
@@ -131,29 +252,14 @@ export default function App() {
           return;
         }
       }
-
-      // Fallback for static GitHub Pages hosting: fetch static data/hamhesab-db.json
-      const staticRes = await fetch('./data/hamhesab-db.json');
-      if (staticRes.ok) {
-        const staticState = await staticRes.json();
-        if (staticState && Array.isArray(staticState.transactions)) {
-          setState((prev) => {
-            if ((staticState.updatedAt || 0) > (prev.updatedAt || 0)) {
-              isApplyingRemoteRef.current = true;
-              return { ...prev, ...staticState };
-            }
-            return prev;
-          });
-        }
-      }
     } catch {
       // Offline mode continues using LocalStorage seamlessly
     }
-  }, []);
+  }, [state]);
 
   useEffect(() => {
     pullStateFromRemote();
-    const interval = setInterval(pullStateFromRemote, 20000);
+    const interval = setInterval(pullStateFromRemote, 15000);
     return () => clearInterval(interval);
   }, [pullStateFromRemote]);
 
@@ -586,7 +692,9 @@ export default function App() {
                   setState({ ...INITIAL_STATE, updatedAt: Date.now() })
                 }
                 onManualSyncNow={handleManualSyncNow}
+                onLockAppNow={() => setIsUnlocked(false)}
                 syncStatus={syncStatus}
+                syncErrorMessage={syncErrorMessage}
               />
             )}
           </motion.div>
