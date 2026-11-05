@@ -2,17 +2,6 @@
   "transactions": [],
   "cards": [
     {
-      "id": "card_hootan_mellat",
-      "title": "ملت هوتن (حقوق)",
-      "bankId": "mellat",
-      "cardNumber": "6104337845128904",
-      "shebaNumber": "IR420120000000007845128904",
-      "owner": "hootan",
-      "initialBalance": 48500000,
-      "expiryDate": "06/04",
-      "isDefault": true
-    },
-    {
       "id": "card_shared_saman",
       "title": "سامان مشترک (خرج خونه)",
       "bankId": "saman",
@@ -326,7 +315,7 @@
     }
   ],
   "reminders": [],
-  "updatedAt": 1793889118343,
+  "updatedAt": 1793889119244,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
@@ -344,7 +333,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793889119150
+      "lastSyncedAt": 1793889120442
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
