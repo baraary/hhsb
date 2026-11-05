@@ -40,13 +40,15 @@ cat > "$WORK_DIR/AndroidManifest.xml" << 'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="ir.hamhesab.app"
-    android:versionCode="2"
-    android:versionName="2.0">
+    android:versionCode="3"
+    android:versionName="3.0">
 
     <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="34" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
     <application
         android:label="@string/app_name"
@@ -75,22 +77,112 @@ cat > "$WORK_DIR/src/ir/hamhesab/app/MainActivity.java" << 'EOF'
 package ir.hamhesab.app;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.telephony.SmsMessage;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class MainActivity extends Activity {
     private WebView webView;
+    private BroadcastReceiver smsReceiver;
     private static final String LIVE_URL = "https://baraary.github.io/hhsb/";
     private static final String LOCAL_FALLBACK = "file:///android_asset/www/index.html";
+    private static final int SMS_PERMISSION_REQ_CODE = 101;
+
+    public class SmsJsBridge {
+        @JavascriptInterface
+        public boolean hasSmsPermission() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                return checkSelfPermission("android.permission.READ_SMS") == PackageManager.PERMISSION_GRANTED;
+            }
+            return true;
+        }
+
+        @JavascriptInterface
+        public void requestSmsPermission() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                requestPermissions(
+                    new String[]{"android.permission.READ_SMS", "android.permission.RECEIVE_SMS"},
+                    SMS_PERMISSION_REQ_CODE
+                );
+            }
+        }
+
+        @JavascriptInterface
+        public String getRecentBankSms(int limit) {
+            JSONArray result = new JSONArray();
+            if (!hasSmsPermission()) {
+                return result.toString();
+            }
+            Cursor cursor = null;
+            try {
+                Uri inboxUri = Uri.parse("content://sms/inbox");
+                cursor = getContentResolver().query(
+                    inboxUri,
+                    new String[]{"_id", "address", "body", "date"},
+                    null,
+                    null,
+                    "date DESC"
+                );
+                if (cursor != null) {
+                    int count = 0;
+                    int maxScan = Math.max(limit * 4, 120);
+                    int scanned = 0;
+                    while (cursor.moveToNext() && count < limit && scanned < maxScan) {
+                        scanned++;
+                        String id = cursor.getString(0);
+                        String address = cursor.getString(1);
+                        String body = cursor.getString(2);
+                        long date = cursor.getLong(3);
+                        if (body != null && (
+                            body.contains("برداشت") ||
+                            body.contains("واریز") ||
+                            body.contains("واريز") ||
+                            body.contains("خرید") ||
+                            body.contains("مانده") ||
+                            body.contains("موجودی") ||
+                            body.contains("حساب") ||
+                            body.contains("ریال") ||
+                            body.contains("ريال") ||
+                            body.contains("بلو")
+                        )) {
+                            JSONObject obj = new JSONObject();
+                            obj.put("id", id != null ? id : String.valueOf(date));
+                            obj.put("address", address != null ? address : "");
+                            obj.put("body", body);
+                            obj.put("date", date);
+                            result.put(obj);
+                            count++;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+            return result.toString();
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -120,6 +212,7 @@ public class MainActivity extends Activity {
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
+        webView.addJavascriptInterface(new SmsJsBridge(), "AndroidSmsBridge");
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -138,6 +231,67 @@ public class MainActivity extends Activity {
 
         setContentView(webView);
         webView.loadUrl(LIVE_URL);
+
+        // Live SMS BroadcastReceiver while app is active
+        smsReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                try {
+                    Bundle bundle = intent.getExtras();
+                    if (bundle != null) {
+                        Object[] pdus = (Object[]) bundle.get("pdus");
+                        String format = bundle.getString("format");
+                        if (pdus != null && pdus.length > 0) {
+                            StringBuilder fullBody = new StringBuilder();
+                            String sender = "";
+                            for (Object pdu : pdus) {
+                                SmsMessage msg = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                                    ? SmsMessage.createFromPdu((byte[]) pdu, format)
+                                    : SmsMessage.createFromPdu((byte[]) pdu);
+                                if (msg != null) {
+                                    sender = msg.getOriginatingAddress();
+                                    fullBody.append(msg.getMessageBody());
+                                }
+                            }
+                            JSONObject obj = new JSONObject();
+                            obj.put("id", String.valueOf(System.currentTimeMillis()));
+                            obj.put("address", sender != null ? sender : "");
+                            obj.put("body", fullBody.toString());
+                            obj.put("date", System.currentTimeMillis());
+                            final String payload = obj.toString();
+                            if (webView != null) {
+                                webView.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        webView.evaluateJavascript(
+                                            "if(window.onNativeBankSmsReceived){window.onNativeBankSmsReceived(" + JSONObject.quote(payload) + ");}",
+                                            null
+                                        );
+                                    }
+                                });
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        };
+        try {
+            IntentFilter filter = new IntentFilter("android.provider.Telephony.SMS_RECEIVED");
+            registerReceiver(smsReceiver, filter);
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        try {
+            if (smsReceiver != null) {
+                unregisterReceiver(smsReceiver);
+            }
+        } catch (Exception ignored) {
+        }
+        super.onDestroy();
     }
 
     @Override

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AppState, Transaction, PersonId, DueReminder } from '../types';
+import { AppState, Transaction, PersonId, DueReminder, ReminderRecurrence } from '../types';
 import {
   formatMoney,
   formatJalaliReadable,
@@ -7,6 +7,7 @@ import {
   toEnglishDigits,
   getMonthKey,
   formatMonthKeyReadable,
+  getCurrentJalaliDateStr,
 } from '../utils/persian';
 import { CircularIcon } from './CircularIcon';
 import { BankLogoVector, IRANIAN_BANKS } from '../utils/iranianBanks';
@@ -15,10 +16,12 @@ import { JalaliDateInput } from './JalaliDateTimePicker';
 interface HomeViewProps {
   state: AppState;
   onAddTransaction: () => void;
+  onOpenBankSms: () => void;
   onEditTransaction: (tx: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
   onNavigateTab: (index: number) => void;
   onAddReminder: (rem: Omit<DueReminder, 'id'>) => void;
+  onUpdateReminder: (id: string, rem: Omit<DueReminder, 'id'>) => void;
   onToggleReminderPaid: (id: string) => void;
   onDeleteReminder: (id: string) => void;
 }
@@ -26,10 +29,12 @@ interface HomeViewProps {
 export const HomeView: React.FC<HomeViewProps> = ({
   state,
   onAddTransaction,
+  onOpenBankSms,
   onEditTransaction,
   onDeleteTransaction,
   onNavigateTab,
   onAddReminder,
+  onUpdateReminder,
   onToggleReminderPaid,
   onDeleteReminder,
 }) => {
@@ -41,11 +46,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
   // Reminder Hub states
   const [reminderTab, setReminderTab] = useState<'scheduled' | 'tagged'>('scheduled');
   const [isAddingReminder, setIsAddingReminder] = useState(false);
+  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [remTitle, setRemTitle] = useState('');
   const [remAmountStr, setRemAmountStr] = useState('');
-  const [remDueDate, setRemDueDate] = useState('1403/08/25');
+  const [remDueDate, setRemDueDate] = useState(() => getCurrentJalaliDateStr());
   const [remCategory, setRemCategory] = useState<DueReminder['category']>('installment');
   const [remPerson, setRemPerson] = useState<PersonId>('shared');
+  const [remRecurrence, setRemRecurrence] = useState<ReminderRecurrence>('monthly');
+  const [remTotalInstallmentsStr, setRemTotalInstallmentsStr] = useState('');
 
   const isMonochrome = settings.colorTheme === 'monochrome';
 
@@ -122,17 +130,50 @@ export const HomeView: React.FC<HomeViewProps> = ({
     e.preventDefault();
     const amt = parseInt(toEnglishDigits(remAmountStr).replace(/\D/g, '') || '0', 10);
     if (!remTitle.trim() || amt <= 0) return;
-    onAddReminder({
+    const totalInst = parseInt(
+      toEnglishDigits(remTotalInstallmentsStr).replace(/\D/g, '') || '0',
+      10
+    );
+    const payload: Omit<DueReminder, 'id'> = {
       title: remTitle.trim(),
       amount: amt,
-      dueDate: remDueDate.trim() || '1403/08/25',
+      dueDate: remDueDate.trim() || getCurrentJalaliDateStr(),
       category: remCategory,
       person: remPerson,
       isPaid: false,
-    });
+      recurrence: remRecurrence,
+      totalInstallments: remRecurrence !== 'once' && totalInst > 0 ? totalInst : undefined,
+      paidInstallments: 0,
+    };
+
+    if (editingReminderId) {
+      const existing = reminders.find((r) => r.id === editingReminderId);
+      onUpdateReminder(editingReminderId, {
+        ...payload,
+        isPaid: existing?.isPaid || false,
+        paidInstallments: existing?.paidInstallments || 0,
+      });
+    } else {
+      onAddReminder(payload);
+    }
+
     setRemTitle('');
     setRemAmountStr('');
+    setRemTotalInstallmentsStr('');
+    setEditingReminderId(null);
     setIsAddingReminder(false);
+  };
+
+  const handleStartEditReminder = (rem: DueReminder) => {
+    setEditingReminderId(rem.id);
+    setRemTitle(rem.title);
+    setRemAmountStr(String(rem.amount));
+    setRemDueDate(rem.dueDate);
+    setRemCategory(rem.category);
+    setRemPerson(rem.person);
+    setRemRecurrence(rem.recurrence || 'once');
+    setRemTotalInstallmentsStr(rem.totalInstallments ? String(rem.totalInstallments) : '');
+    setIsAddingReminder(true);
   };
 
   return (
@@ -144,7 +185,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <div className="absolute -left-16 -top-16 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none" />
           <div className="absolute -right-12 -bottom-16 w-56 h-56 rounded-full bg-black/15 blur-xl pointer-events-none" />
 
-          <div className="relative z-10 flex items-center justify-between gap-4">
+          <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <CircularIcon name="wallet" size="md" variant="glass" />
               <div>
@@ -157,13 +198,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onAddTransaction}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white text-slate-900 font-extrabold text-xs shadow-md hover:bg-white/90 active:scale-95 transition-all cursor-pointer whitespace-nowrap shrink-0"
-            >
-              <span>+ ثبت دخل و خرج</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={onOpenBankSms}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/20 hover:bg-white/30 text-white font-extrabold text-xs backdrop-blur-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                title="خواندن خودکار پیامک‌های بانکی"
+              >
+                <span>💬 پیامک بانکی</span>
+              </button>
+              <button
+                type="button"
+                onClick={onAddTransaction}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white text-slate-900 font-extrabold text-xs shadow-md hover:bg-white/90 active:scale-95 transition-all cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <span>+ ثبت دخل و خرج</span>
+              </button>
+            </div>
           </div>
 
           <div className="relative z-10 my-6">
@@ -368,10 +419,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
             {reminderTab === 'scheduled' && (
               <button
                 type="button"
-                onClick={() => setIsAddingReminder(!isAddingReminder)}
+                onClick={() => {
+                  if (isAddingReminder) {
+                    setIsAddingReminder(false);
+                    setEditingReminderId(null);
+                  } else {
+                    setEditingReminderId(null);
+                    setRemTitle('');
+                    setRemAmountStr('');
+                    setRemTotalInstallmentsStr('');
+                    setRemRecurrence('monthly');
+                    setIsAddingReminder(true);
+                  }
+                }}
                 className="px-3 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer whitespace-nowrap"
               >
-                {isAddingReminder ? 'بستن' : '+ یادآور جدید'}
+                {isAddingReminder ? 'بستن فرم' : '+ یادآور / قسط جدید'}
               </button>
             )}
           </div>
@@ -463,155 +526,275 @@ export const HomeView: React.FC<HomeViewProps> = ({
             {isAddingReminder && (
               <form
                 onSubmit={handleSaveReminderForm}
-                className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end"
+                className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3"
               >
-                <div className="sm:col-span-4">
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                    عنوان تعهد (قسط، اجاره، بدهی)
-                  </label>
-                  <input
-                    type="text"
-                    value={remTitle}
-                    onChange={(e) => setRemTitle(e.target.value)}
-                    placeholder="مثلاً: قسط وام مسکن یا اجاره خانه"
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                  <div className="sm:col-span-4">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                      عنوان تعهد (قسط، اجاره، بدهی، طلب)
+                    </label>
+                    <input
+                      type="text"
+                      value={remTitle}
+                      onChange={(e) => setRemTitle(e.target.value)}
+                      placeholder="مثلاً: قسط وام ازدواج یا اجاره خانه"
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                      مبلغ هر نوبت ({settings.currencyUnit})
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={
+                        remAmountStr
+                          ? formatMoney(
+                              parseInt(toEnglishDigits(remAmountStr).replace(/\D/g, '') || '0', 10)
+                            )
+                          : ''
+                      }
+                      onChange={(e) =>
+                        setRemAmountStr(toEnglishDigits(e.target.value).replace(/\D/g, ''))
+                      }
+                      placeholder="۳،۲۰۰،۰۰۰"
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                      تاریخ سررسید بعدی
+                    </label>
+                    <JalaliDateInput
+                      value={remDueDate}
+                      onChange={(newDate) => setRemDueDate(newDate)}
+                      placeholder="انتخاب تاریخ سررسید"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                      نوع تعهد
+                    </label>
+                    <select
+                      value={remCategory}
+                      onChange={(e) =>
+                        setRemCategory(e.target.value as DueReminder['category'])
+                      }
+                      className="w-full px-2 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                    >
+                      <option value="installment">قسط وام</option>
+                      <option value="rent">اجاره و شارژ</option>
+                      <option value="debt">بدهی</option>
+                      <option value="receivable">طلب دریافتی</option>
+                      <option value="bill">قبض</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="sm:col-span-3">
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                    مبلغ ({settings.currencyUnit})
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={
-                      remAmountStr
-                        ? formatMoney(
-                            parseInt(toEnglishDigits(remAmountStr).replace(/\D/g, '') || '0', 10)
+
+                {/* Second row of form: Recurrence (تکرار ماهانه، سالانه و...) + Installment Count + Person */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end pt-1">
+                  <div className="sm:col-span-4">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                      دوره تکرار خودکار (مناسب اقساط و اجاره)
+                    </label>
+                    <select
+                      value={remRecurrence}
+                      onChange={(e) =>
+                        setRemRecurrence(e.target.value as ReminderRecurrence)
+                      }
+                      className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                    >
+                      <option value="monthly">تکرار ماهانه (هر ماه در همین روز)</option>
+                      <option value="yearly">تکرار سالانه (هر سال)</option>
+                      <option value="quarterly">تکرار هر ۳ ماه (فصلی)</option>
+                      <option value="weekly">تکرار هفتگی</option>
+                      <option value="once">بدون تکرار (فقط یک‌بار)</option>
+                    </select>
+                  </div>
+
+                  {remRecurrence !== 'once' && (
+                    <div className="sm:col-span-3">
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                        تعداد کل اقساط (اختیاری)
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={toPersianDigits(remTotalInstallmentsStr)}
+                        onChange={(e) =>
+                          setRemTotalInstallmentsStr(
+                            toEnglishDigits(e.target.value).replace(/\D/g, '')
                           )
-                        : ''
-                    }
-                    onChange={(e) =>
-                      setRemAmountStr(toEnglishDigits(e.target.value).replace(/\D/g, ''))
-                    }
-                    placeholder="۳،۲۰۰،۰۰۰"
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                    تاریخ سررسید
-                  </label>
-                  <JalaliDateInput
-                    value={remDueDate}
-                    onChange={(newDate) => setRemDueDate(newDate)}
-                    placeholder="انتخاب تاریخ سررسید"
-                  />
-                </div>
-                <div className="sm:col-span-3 flex gap-1.5">
-                  <select
-                    value={remCategory}
-                    onChange={(e) =>
-                      setRemCategory(e.target.value as DueReminder['category'])
-                    }
-                    className="flex-1 px-2 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
-                  >
-                    <option value="installment">قسط وام</option>
-                    <option value="rent">اجاره و شارژ</option>
-                    <option value="debt">بدهی</option>
-                    <option value="receivable">طلب دریافتی</option>
-                    <option value="bill">قبض</option>
-                  </select>
-                  <button
-                    type="submit"
-                    className="px-3.5 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shrink-0"
-                  >
-                    ثبت
-                  </button>
+                        }
+                        placeholder="مثلاً ۱۲ یا ۲۴ (خالی = دائمی)"
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums"
+                      />
+                    </div>
+                  )}
+
+                  <div className={remRecurrence !== 'once' ? 'sm:col-span-2' : 'sm:col-span-5'}>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                      سهم / مربوط به
+                    </label>
+                    <select
+                      value={remPerson}
+                      onChange={(e) => setRemPerson(e.target.value as PersonId)}
+                      className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                    >
+                      <option value="shared">{settings.sharedLabel}</option>
+                      <option value="hootan">{settings.hootanName}</option>
+                      <option value="fatemeh">{settings.fatemehName}</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-3 flex gap-2">
+                    <button
+                      type="submit"
+                      className="flex-1 py-2 px-4 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer"
+                    >
+                      {editingReminderId ? 'ذخیره تغییرات' : 'ثبت یادآور'}
+                    </button>
+                  </div>
                 </div>
               </form>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {reminders.map((rem) => {
-                const catLabel =
-                  rem.category === 'installment'
-                    ? 'قسط وام'
-                    : rem.category === 'rent'
-                    ? 'اجاره و مسکن'
-                    : rem.category === 'debt'
-                    ? 'بدهی'
-                    : rem.category === 'receivable'
-                    ? 'طلب'
-                    : 'قبض';
-                const personLabel =
-                  rem.person === 'hootan'
-                    ? settings.hootanName
-                    : rem.person === 'fatemeh'
-                    ? settings.fatemehName
-                    : settings.sharedLabel;
+            {reminders.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400 space-y-2">
+                <p>هیچ یادآور قسط یا بدهی فعالی ثبت نشده است.</p>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingReminder(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold cursor-pointer"
+                >
+                  + افزودن اولین قسط یا یادآور دوره ای
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {reminders.map((rem) => {
+                  const catLabel =
+                    rem.category === 'installment'
+                      ? 'قسط وام'
+                      : rem.category === 'rent'
+                      ? 'اجاره و مسکن'
+                      : rem.category === 'debt'
+                      ? 'بدهی'
+                      : rem.category === 'receivable'
+                      ? 'طلب'
+                      : 'قبض';
+                  const personLabel =
+                    rem.person === 'hootan'
+                      ? settings.hootanName
+                      : rem.person === 'fatemeh'
+                      ? settings.fatemehName
+                      : settings.sharedLabel;
 
-                return (
-                  <div
-                    key={rem.id}
-                    className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2.5 transition-all ${
-                      rem.isPaid
-                        ? 'border-slate-200/50 dark:border-slate-800/50 bg-slate-50/40 dark:bg-slate-800/20 opacity-60'
-                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <button
-                        type="button"
-                        onClick={() => onToggleReminderPaid(rem.id)}
-                        title={rem.isPaid ? 'علامت به عنوان پرداخت نشده' : 'تسویه شد'}
-                        className="cursor-pointer shrink-0"
-                      >
-                        <CircularIcon
-                          name={rem.isPaid ? 'check' : 'clock'}
-                          color={rem.isPaid ? '#10b981' : '#f59e0b'}
-                          size="sm"
-                          variant={rem.isPaid ? 'solid' : 'soft'}
-                        />
-                      </button>
-                      <div className="min-w-0">
-                        <h4
-                          className={`text-xs font-extrabold truncate ${
+                  const recLabel =
+                    rem.recurrence === 'monthly'
+                      ? 'ماهانه'
+                      : rem.recurrence === 'yearly'
+                      ? 'سالانه'
+                      : rem.recurrence === 'quarterly'
+                      ? 'هر ۳ ماه'
+                      : rem.recurrence === 'weekly'
+                      ? 'هفتگی'
+                      : '';
+
+                  const isRecurring = Boolean(rem.recurrence && rem.recurrence !== 'once');
+
+                  return (
+                    <div
+                      key={rem.id}
+                      className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2.5 transition-all ${
+                        rem.isPaid
+                          ? 'border-slate-200/50 dark:border-slate-800/50 bg-slate-50/40 dark:bg-slate-800/20 opacity-60'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => onToggleReminderPaid(rem.id)}
+                          title={
                             rem.isPaid
-                              ? 'line-through text-slate-400'
-                              : 'text-slate-900 dark:text-white'
-                          }`}
+                              ? 'فعال‌سازی مجدد یادآور'
+                              : isRecurring
+                              ? 'ثبت پرداخت این دوره و رفتن به سررسید بعدی'
+                              : 'علامت به عنوان تسویه شده'
+                          }
+                          className="cursor-pointer shrink-0"
                         >
-                          {rem.title}
-                        </h4>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
-                          {catLabel} · {personLabel} · سررسید: {toPersianDigits(rem.dueDate)}
+                          <CircularIcon
+                            name={rem.isPaid ? 'check' : 'clock'}
+                            color={rem.isPaid ? '#10b981' : '#f59e0b'}
+                            size="sm"
+                            variant={rem.isPaid ? 'solid' : 'soft'}
+                          />
+                        </button>
+                        <div
+                          onClick={() => handleStartEditReminder(rem)}
+                          className="min-w-0 cursor-pointer"
+                          title="برای ویرایش کلیک کنید"
+                        >
+                          <h4
+                            className={`text-xs font-extrabold truncate ${
+                              rem.isPaid
+                                ? 'line-through text-slate-400'
+                                : 'text-slate-900 dark:text-white'
+                            }`}
+                          >
+                            {rem.title}
+                          </h4>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                            {catLabel} · {personLabel} · سررسید: {toPersianDigits(rem.dueDate)}
+                          </div>
+                          {(recLabel || rem.totalInstallments) && (
+                            <div className="text-[10px] font-bold theme-text mt-0.5 tabular-nums">
+                              {recLabel ? `↻ تکرار ${recLabel}` : ''}
+                              {rem.totalInstallments
+                                ? ` · قسط ${toPersianDigits(
+                                    (rem.paidInstallments || 0) + (rem.isPaid ? 0 : 1)
+                                  )} از ${toPersianDigits(rem.totalInstallments)}`
+                                : rem.paidInstallments
+                                ? ` · ${toPersianDigits(rem.paidInstallments)} نوبت پرداخت شد`
+                                : ''}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-left tabular-nums">
-                        <div className="text-xs font-black text-slate-900 dark:text-white">
-                          {formatMoney(rem.amount)}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-left tabular-nums">
+                          <div className="text-xs font-black text-slate-900 dark:text-white">
+                            {formatMoney(rem.amount)}
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            {rem.isPaid
+                              ? 'تسویه شد'
+                              : isRecurring
+                              ? 'تمدید خودکار'
+                              : settings.currencyUnit}
+                          </span>
                         </div>
-                        <span className="text-[10px] text-slate-400">
-                          {rem.isPaid ? 'تسویه شد' : settings.currencyUnit}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteReminder(rem.id)}
+                          className="text-slate-400 hover:text-rose-500 text-sm font-bold px-1.5 py-0.5 cursor-pointer"
+                          title="حذف دائمی یادآور"
+                        >
+                          ×
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteReminder(rem.id)}
-                        className="text-slate-400 hover:text-rose-500 text-xs font-bold px-1 cursor-pointer"
-                        title="حذف یادآور"
-                      >
-                        ×
-                      </button>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

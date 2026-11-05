@@ -91,6 +91,7 @@ export interface Transaction {
   jalaliDate: string; // YYYY/MM/DD e.g., 1403/08/14
   time: string; // HH:mm e.g., 19:45
   note?: string;
+  smsHash?: string; // Prevents duplicate bank SMS imports
   createdAt: number;
 }
 
@@ -100,15 +101,20 @@ export interface BudgetGoal {
   monthlyLimit: number; // Toman
 }
 
+export type ReminderRecurrence = 'once' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
 export interface DueReminder {
   id: string;
   title: string;
   amount: number;
-  dueDate: string; // e.g., 1403/08/25 or روز ۲۵ هر ماه
+  dueDate: string; // e.g., 1403/08/25
   category: 'installment' | 'rent' | 'debt' | 'receivable' | 'bill';
   person: PersonId;
   cardId?: string;
   isPaid: boolean;
+  recurrence?: ReminderRecurrence;
+  totalInstallments?: number; // Optional total installments count (e.g. 12, 24)
+  paidInstallments?: number; // Number of installments paid so far
   note?: string;
 }
 
@@ -134,6 +140,7 @@ export interface AppSettings {
   colorTheme: ColorThemeId;
   pinCode: string; // Optional security lock for private GitHub Pages
   monthlyTotalBudget: number;
+  autoCheckClipboardSms?: boolean; // Optional auto-detect bank SMS on app focus
   githubSync?: GitHubSyncConfig;
 }
 
@@ -144,6 +151,8 @@ export interface AppState {
   tags: TagItem[];
   budgets: BudgetGoal[];
   reminders?: DueReminder[];
+  dismissedReminderIds?: string[];
+  importedSmsHashes?: string[];
   settings: AppSettings;
   updatedAt?: number;
 }

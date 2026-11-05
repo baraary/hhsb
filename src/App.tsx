@@ -9,8 +9,14 @@ import { StatsView } from './components/StatsView';
 import { ArchiveView } from './components/ArchiveView';
 import { SettingsView } from './components/SettingsView';
 import { TransactionModal } from './components/TransactionModal';
+import { BankSmsModal } from './components/BankSmsModal';
 import { PWAInstallButton, OfflineIndicator } from './components/PWAInstallButton';
-import { toEnglishDigits } from './utils/persian';
+import { toEnglishDigits, advanceJalaliDate } from './utils/persian';
+import {
+  isLikelyBankSms,
+  computeSmsHash,
+  NativeAndroidSmsItem,
+} from './utils/bankSmsParser';
 import {
   detectGitHubPagesRepo,
   consumePartnerMagicLinkFromHash,
@@ -19,6 +25,7 @@ import {
 } from './utils/githubSync';
 
 const STORAGE_KEY = 'hamhesab_hootan_fatemeh_v2';
+const LEGACY_DEMO_REMINDER_IDS = ['rem_1', 'rem_2', 'rem_3'];
 
 interface NavTab {
   id: string;
@@ -47,11 +54,28 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         const existingSync = parsed.settings?.githubSync || {};
+        const dismissedIds: string[] = Array.from(
+          new Set([
+            ...LEGACY_DEMO_REMINDER_IDS,
+            ...(Array.isArray(parsed.dismissedReminderIds)
+              ? parsed.dismissedReminderIds
+              : []),
+          ])
+        );
+        const rawReminders: DueReminder[] = Array.isArray(parsed.reminders)
+          ? parsed.reminders
+          : [];
         return {
           ...INITIAL_STATE,
           ...parsed,
-          budgets: parsed.budgets?.length ? parsed.budgets : INITIAL_STATE.budgets,
-          reminders: parsed.reminders?.length ? parsed.reminders : INITIAL_STATE.reminders,
+          budgets: Array.isArray(parsed.budgets)
+            ? parsed.budgets
+            : INITIAL_STATE.budgets,
+          reminders: rawReminders.filter((r) => !dismissedIds.includes(r.id)),
+          dismissedReminderIds: dismissedIds,
+          importedSmsHashes: Array.isArray(parsed.importedSmsHashes)
+            ? parsed.importedSmsHashes
+            : [],
           settings: {
             ...INITIAL_STATE.settings,
             ...(parsed.settings || {}),
@@ -79,6 +103,10 @@ export default function App() {
 
     return {
       ...INITIAL_STATE,
+      reminders: [],
+      dismissedReminderIds: LEGACY_DEMO_REMINDER_IDS,
+      importedSmsHashes: [],
+      updatedAt: 0,
       settings: {
         ...INITIAL_STATE.settings,
         githubSync: {
@@ -95,6 +123,8 @@ export default function App() {
   const [swipeDirection, setSwipeDirection] = useState<number>(0);
   const [isTxModalOpen, setIsTxModalOpen] = useState<boolean>(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [isBankSmsModalOpen, setIsBankSmsModalOpen] = useState<boolean>(false);
+  const [initialBankSmsText, setInitialBankSmsText] = useState<string>('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [syncErrorMessage, setSyncErrorMessage] = useState<string>('');
 
@@ -107,6 +137,7 @@ export default function App() {
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const isApplyingRemoteRef = useRef<boolean>(false);
+  const hasUserEditedRef = useRef<boolean>(false);
 
   // 1. Default LocalStorage Persistence
   useEffect(() => {
@@ -175,9 +206,21 @@ export default function App() {
           // Even if timestamps are equal, if Fatemeh's phone didn't have the token yet and we recovered it from syncVault, save it!
           if (remoteUpdated > localUpdated) {
             isApplyingRemoteRef.current = true;
+            const mergedDismissed = Array.from(
+              new Set([
+                ...LEGACY_DEMO_REMINDER_IDS,
+                ...(prev.dismissedReminderIds || []),
+                ...(remoteData.dismissedReminderIds || []),
+              ])
+            );
+            const cleanRemoteReminders = Array.isArray(remoteData.reminders)
+              ? remoteData.reminders.filter((r) => !mergedDismissed.includes(r.id))
+              : [];
             return {
               ...prev,
               ...remoteData,
+              reminders: cleanRemoteReminders,
+              dismissedReminderIds: mergedDismissed,
               settings: {
                 ...prev.settings,
                 ...(remoteData.settings || {}),
@@ -233,9 +276,23 @@ export default function App() {
             const localUpdated = prev.updatedAt || 0;
             if (remoteUpdated > localUpdated) {
               isApplyingRemoteRef.current = true;
+              const mergedDismissed = Array.from(
+                new Set([
+                  ...LEGACY_DEMO_REMINDER_IDS,
+                  ...(prev.dismissedReminderIds || []),
+                  ...(data.state.dismissedReminderIds || []),
+                ])
+              );
+              const cleanRemoteReminders = Array.isArray(data.state.reminders)
+                ? data.state.reminders.filter(
+                    (r: DueReminder) => !mergedDismissed.includes(r.id)
+                  )
+                : [];
               return {
                 ...prev,
                 ...data.state,
+                reminders: cleanRemoteReminders,
+                dismissedReminderIds: mergedDismissed,
                 settings: {
                   ...prev.settings,
                   ...(data.state.settings || {}),
@@ -264,10 +321,13 @@ export default function App() {
     return () => clearInterval(interval);
   }, [pullStateFromRemote]);
 
-  // Debounced auto-push when local state changes
+  // Debounced auto-push ONLY when the user has actually edited local state
   useEffect(() => {
     if (isApplyingRemoteRef.current) {
       isApplyingRemoteRef.current = false;
+      return;
+    }
+    if (!hasUserEditedRef.current) {
       return;
     }
     const timer = setTimeout(() => {
@@ -275,6 +335,47 @@ export default function App() {
     }, 800);
     return () => clearTimeout(timer);
   }, [state, pushStateToRemote]);
+
+  // Listen for Native Android APK incoming Bank SMS & optional Auto-Clipboard detection
+  useEffect(() => {
+    window.onNativeBankSmsReceived = (smsJson: string) => {
+      try {
+        const item: NativeAndroidSmsItem = JSON.parse(smsJson);
+        if (item?.body && isLikelyBankSms(item.body, item.address)) {
+          setInitialBankSmsText(item.body);
+          setIsBankSmsModalOpen(true);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    return () => {
+      window.onNativeBankSmsReceived = undefined;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!state.settings.autoCheckClipboardSms) return;
+    const handleFocus = async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text && isLikelyBankSms(text)) {
+          const hash = computeSmsHash(text);
+          const alreadyDone =
+            (state.importedSmsHashes || []).includes(hash) ||
+            state.transactions.some((t) => t.smsHash === hash);
+          if (!alreadyDone) {
+            setInitialBankSmsText(text);
+            setIsBankSmsModalOpen(true);
+          }
+        }
+      } catch {
+        // Clipboard read requires permission or user gesture on some browsers
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [state.settings.autoCheckClipboardSms, state.importedSmsHashes, state.transactions]);
 
   // Sync Dark Mode (Manual or Auto/System Phone Theme) & Color Theme on <html>
   useEffect(() => {
@@ -354,11 +455,12 @@ export default function App() {
     touchStartY.current = null;
   };
 
-  // CRUD Handlers (all stamp updatedAt: Date.now() for automatic sync resolution)
+  // CRUD Handlers (all stamp updatedAt: Date.now() and mark hasUserEditedRef = true)
   const handleSaveTransaction = (
     txData: Omit<Transaction, 'id' | 'createdAt'>,
     existingId?: string
   ) => {
+    hasUserEditedRef.current = true;
     setState((prev) => {
       if (existingId) {
         return {
@@ -382,7 +484,34 @@ export default function App() {
     });
   };
 
+  const handleImportBankSmsTransactions = (
+    txList: Omit<Transaction, 'id' | 'createdAt'>[]
+  ) => {
+    if (!txList.length) return;
+    hasUserEditedRef.current = true;
+    setState((prev) => {
+      const now = Date.now();
+      const newTransactions: Transaction[] = txList.map((txData, index) => ({
+        ...txData,
+        id: `tx_${now}_${index}`,
+        createdAt: now + index,
+      }));
+      const newHashes = txList
+        .map((t) => t.smsHash)
+        .filter((h): h is string => Boolean(h));
+      return {
+        ...prev,
+        updatedAt: Date.now(),
+        transactions: [...newTransactions, ...prev.transactions],
+        importedSmsHashes: Array.from(
+          new Set([...(prev.importedSmsHashes || []), ...newHashes])
+        ),
+      };
+    });
+  };
+
   const handleDeleteTransaction = (id: string) => {
+    hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
@@ -391,6 +520,7 @@ export default function App() {
   };
 
   const handleSaveCard = (cardData: Omit<BankCard, 'id'>, existingId?: string) => {
+    hasUserEditedRef.current = true;
     setState((prev) => {
       if (existingId) {
         return {
@@ -414,6 +544,7 @@ export default function App() {
   };
 
   const handleDeleteCard = (id: string) => {
+    hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
@@ -422,6 +553,7 @@ export default function App() {
   };
 
   const handleSaveCategory = (cat: Category) => {
+    hasUserEditedRef.current = true;
     setState((prev) => {
       const exists = prev.categories.some((c) => c.id === cat.id);
       return {
@@ -435,6 +567,7 @@ export default function App() {
   };
 
   const handleDeleteCategory = (catId: string) => {
+    hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
@@ -443,6 +576,7 @@ export default function App() {
   };
 
   const handleSaveTag = (tag: TagItem) => {
+    hasUserEditedRef.current = true;
     setState((prev) => {
       const exists = prev.tags.some((t) => t.id === tag.id);
       return {
@@ -456,6 +590,7 @@ export default function App() {
   };
 
   const handleDeleteTag = (tagId: string) => {
+    hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
@@ -464,6 +599,7 @@ export default function App() {
   };
 
   const handleUpdateBudget = (categoryId: string, monthlyLimit: number) => {
+    hasUserEditedRef.current = true;
     setState((prev) => {
       const exists = prev.budgets.some((b) => b.categoryId === categoryId);
       const updatedBudgets = exists
@@ -483,6 +619,7 @@ export default function App() {
   };
 
   const handleUpdateSettings = (partial: Partial<AppState['settings']>) => {
+    hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
@@ -491,6 +628,7 @@ export default function App() {
   };
 
   const handleAddReminder = (rem: Omit<DueReminder, 'id'>) => {
+    hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
@@ -501,21 +639,58 @@ export default function App() {
     }));
   };
 
-  const handleToggleReminderPaid = (id: string) => {
+  const handleUpdateReminder = (id: string, rem: Omit<DueReminder, 'id'>) => {
+    hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
       reminders: (prev.reminders || []).map((r) =>
-        r.id === id ? { ...r, isPaid: !r.isPaid } : r
+        r.id === id ? { ...rem, id } : r
       ),
     }));
   };
 
+  const handleToggleReminderPaid = (id: string) => {
+    hasUserEditedRef.current = true;
+    setState((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      reminders: (prev.reminders || []).map((r) => {
+        if (r.id !== id) return r;
+        const recurrence = r.recurrence || 'once';
+
+        // If recurring and not yet marked finally paid, advance dueDate to next period!
+        if (!r.isPaid && recurrence !== 'once') {
+          const nextPaidCount = (r.paidInstallments || 0) + 1;
+          if (r.totalInstallments && nextPaidCount >= r.totalInstallments) {
+            return {
+              ...r,
+              paidInstallments: nextPaidCount,
+              isPaid: true,
+            };
+          }
+          return {
+            ...r,
+            paidInstallments: nextPaidCount,
+            dueDate: advanceJalaliDate(r.dueDate, recurrence),
+            isPaid: false,
+          };
+        }
+
+        return { ...r, isPaid: !r.isPaid };
+      }),
+    }));
+  };
+
   const handleDeleteReminder = (id: string) => {
+    hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
       reminders: (prev.reminders || []).filter((r) => r.id !== id),
+      dismissedReminderIds: Array.from(
+        new Set([...(prev.dismissedReminderIds || []), id])
+      ),
     }));
   };
 
@@ -647,6 +822,10 @@ export default function App() {
                   setEditingTx(null);
                   setIsTxModalOpen(true);
                 }}
+                onOpenBankSms={() => {
+                  setInitialBankSmsText('');
+                  setIsBankSmsModalOpen(true);
+                }}
                 onEditTransaction={(tx) => {
                   setEditingTx(tx);
                   setIsTxModalOpen(true);
@@ -654,6 +833,7 @@ export default function App() {
                 onDeleteTransaction={handleDeleteTransaction}
                 onNavigateTab={handleTabChange}
                 onAddReminder={handleAddReminder}
+                onUpdateReminder={handleUpdateReminder}
                 onToggleReminderPaid={handleToggleReminderPaid}
                 onDeleteReminder={handleDeleteReminder}
               />
@@ -693,12 +873,14 @@ export default function App() {
                 onDeleteCategory={handleDeleteCategory}
                 onSaveTag={handleSaveTag}
                 onDeleteTag={handleDeleteTag}
-                onImportState={(newState) =>
-                  setState({ ...newState, updatedAt: Date.now() })
-                }
-                onResetDefaults={() =>
-                  setState({ ...INITIAL_STATE, updatedAt: Date.now() })
-                }
+                onImportState={(newState) => {
+                  hasUserEditedRef.current = true;
+                  setState({ ...newState, updatedAt: Date.now() });
+                }}
+                onResetDefaults={() => {
+                  hasUserEditedRef.current = true;
+                  setState({ ...INITIAL_STATE, updatedAt: Date.now() });
+                }}
                 onManualSyncNow={handleManualSyncNow}
                 onLockAppNow={() => setIsUnlocked(false)}
                 syncStatus={syncStatus}
@@ -746,7 +928,7 @@ export default function App() {
         </nav>
       </div>
 
-      {/* Add / Edit Transaction Modal */}
+      {/* Add / Edit Transaction Modal & Bank SMS Reader Modal */}
       <div className="monochrome-scope">
         <TransactionModal
           isOpen={isTxModalOpen}
@@ -757,6 +939,20 @@ export default function App() {
           state={state}
           onSave={handleSaveTransaction}
           editingTransaction={editingTx}
+        />
+
+        <BankSmsModal
+          isOpen={isBankSmsModalOpen}
+          onClose={() => {
+            setIsBankSmsModalOpen(false);
+            setInitialBankSmsText('');
+          }}
+          state={state}
+          onImportTransactions={handleImportBankSmsTransactions}
+          onUpdateAutoCheckClipboard={(enabled) =>
+            handleUpdateSettings({ autoCheckClipboardSms: enabled })
+          }
+          initialRawSms={initialBankSmsText}
         />
       </div>
     </div>

@@ -69,3 +69,83 @@ export function getCurrentTimeStr(): string {
   const m = String(now.getMinutes()).padStart(2, '0');
   return `${h}:${m}`;
 }
+
+export function getCurrentJalaliDateStr(): string {
+  try {
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    const y = parts.find((p) => p.type === 'year')?.value || '1403';
+    const m = parts.find((p) => p.type === 'month')?.value || '08';
+    const d = parts.find((p) => p.type === 'day')?.value || '15';
+    return `${y}/${m.padStart(2, '0')}/${d.padStart(2, '0')}`;
+  } catch {
+    return '1403/08/15';
+  }
+}
+
+export function isJalaliLeapYear(year: number): boolean {
+  const r = ((year - 474) % 2820 + 2820) % 2820;
+  return (((r + 474 + 38) * 682) % 2816) < 682;
+}
+
+export function getJalaliMonthLength(year: number, month: number): number {
+  if (month >= 1 && month <= 6) return 31;
+  if (month >= 7 && month <= 11) return 30;
+  return isJalaliLeapYear(year) ? 30 : 29;
+}
+
+/**
+ * Advances a Jalali date string (YYYY/MM/DD) by weekly, monthly, quarterly, or yearly recurrence
+ */
+export function advanceJalaliDate(
+  jalaliDate: string,
+  recurrence: 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+): string {
+  const clean = toEnglishDigits(jalaliDate || '').trim();
+  const parts = clean.split('/').map((n) => parseInt(n, 10));
+  if (parts.length !== 3 || parts.some(isNaN)) {
+    return getCurrentJalaliDateStr();
+  }
+  let [year, month, day] = parts;
+
+  if (recurrence === 'weekly') {
+    day += 7;
+    let maxDay = getJalaliMonthLength(year, month);
+    while (day > maxDay) {
+      day -= maxDay;
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+      maxDay = getJalaliMonthLength(year, month);
+    }
+  } else if (recurrence === 'monthly') {
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+    const maxDay = getJalaliMonthLength(year, month);
+    if (day > maxDay) day = maxDay;
+  } else if (recurrence === 'quarterly') {
+    month += 3;
+    while (month > 12) {
+      month -= 12;
+      year += 1;
+    }
+    const maxDay = getJalaliMonthLength(year, month);
+    if (day > maxDay) day = maxDay;
+  } else if (recurrence === 'yearly') {
+    year += 1;
+    const maxDay = getJalaliMonthLength(year, month);
+    if (day > maxDay) day = maxDay;
+  }
+
+  return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+}
+

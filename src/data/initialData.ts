@@ -434,38 +434,7 @@ export const INITIAL_BUDGETS: BudgetGoal[] = [
   { id: 'b_7', categoryId: 'cat_fun', monthlyLimit: 4000000 },
 ];
 
-export const INITIAL_REMINDERS: DueReminder[] = [
-  {
-    id: 'rem_1',
-    title: 'قسط وام بانک رسالت و ازدواج',
-    amount: 3200000,
-    dueDate: '1403/08/25',
-    category: 'installment',
-    person: 'shared',
-    isPaid: false,
-    note: 'کسر خودکار از حساب ملت هوتن',
-  },
-  {
-    id: 'rem_2',
-    title: 'اجاره و شارژ ماهانه آپارتمان',
-    amount: 9500000,
-    dueDate: '1403/09/01',
-    category: 'rent',
-    person: 'shared',
-    isPaid: false,
-    note: 'واریز به حساب صاحب‌خانه',
-  },
-  {
-    id: 'rem_3',
-    title: 'تسویه اسنپ‌پی (خرید قسطی پوشاک)',
-    amount: 1450000,
-    dueDate: '1403/08/29',
-    category: 'debt',
-    person: 'fatemeh',
-    isPaid: false,
-    note: 'قسط سوم اسنپ‌پی فاطمه',
-  },
-];
+export const INITIAL_REMINDERS: DueReminder[] = [];
 
 export const INITIAL_STATE: AppState = {
   transactions: INITIAL_TRANSACTIONS,
@@ -474,7 +443,9 @@ export const INITIAL_STATE: AppState = {
   tags: INITIAL_TAGS,
   budgets: INITIAL_BUDGETS,
   reminders: INITIAL_REMINDERS,
-  updatedAt: Date.now(),
+  dismissedReminderIds: ['rem_1', 'rem_2', 'rem_3'],
+  importedSmsHashes: [],
+  updatedAt: 0,
   settings: {
     hootanName: 'هوتن',
     fatemehName: 'فاطمه',
