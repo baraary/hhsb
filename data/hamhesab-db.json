@@ -80,6 +80,15 @@
       "initialBalance": 29452312,
       "expiryDate": "08/05",
       "id": "card_1793906228642"
+    },
+    {
+      "title": "ملی اصلی فاطمه",
+      "bankId": "melli",
+      "cardNumber": "6037997214411713",
+      "owner": "fatemeh",
+      "initialBalance": 2623,
+      "expiryDate": "06/05",
+      "id": "card_1793906326211"
     }
   ],
   "categories": [
@@ -381,13 +390,13 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793906228642,
+  "updatedAt": 1793906326211,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
     "sharedLabel": "مشترک",
     "currencyUnit": "تومان",
-    "darkMode": false,
+    "darkMode": true,
     "themeMode": "system",
     "colorTheme": "turquoise",
     "pinCode": "",
@@ -399,7 +408,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793906239213
+      "lastSyncedAt": 1793906327019
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
