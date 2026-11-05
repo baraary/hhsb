@@ -335,19 +335,8 @@
       "monthlyLimit": 4000000
     }
   ],
-  "reminders": [
-    {
-      "id": "rem_3",
-      "title": "تسویه اسنپ‌پی (خرید قسطی پوشاک)",
-      "amount": 1450000,
-      "dueDate": "1403/08/29",
-      "category": "debt",
-      "person": "fatemeh",
-      "isPaid": false,
-      "note": "قسط سوم اسنپ‌پی فاطمه"
-    }
-  ],
-  "updatedAt": 1793889111810,
+  "reminders": [],
+  "updatedAt": 1793889112734,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
@@ -365,7 +354,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793889112617
+      "lastSyncedAt": 1793889114005
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
