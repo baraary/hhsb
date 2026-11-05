@@ -1,0 +1,6 @@
+{
+  "name": "هم‌حساب | مدیریت مالی مشترک هوتن و فاطمه",
+  "description": "وب‌اپلیکیشن حرفه‌ای مدیریت دخل و خرج، کارت‌های بانکی ایرانی، آمار و آرشیو هزینه‌های مشترک هوتن و فاطمه",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
