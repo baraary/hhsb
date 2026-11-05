@@ -21,9 +21,10 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const finalOwner = repoOwner || autoRepo.repoOwner || 'baraary';
   const finalRepo = repoName || autoRepo.repoName || 'hhsb';
   const githubPagesUrl = `https://${finalOwner}.github.io/${finalRepo}/`;
-  const pwaBuilderUrl = `https://www.pwabuilder.com/reportcard?site=${encodeURIComponent(
-    githubPagesUrl
-  )}`;
+  const directApkUrl =
+    typeof window !== 'undefined' && window.location.hostname.endsWith('.github.io')
+      ? './hamhesab.apk'
+      : `${githubPagesUrl}hamhesab.apk`;
 
   const handlePrimaryClick = async () => {
     if (isInstallable) {
@@ -44,31 +45,40 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           type="button"
           onClick={handlePrimaryClick}
           className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-extrabold transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1.5"
-          title="نصب وب‌اپ یا دریافت فایل APK اندروید"
+          title="نصب وب‌اپ یا دانلود مستقیم فایل APK اندروید"
         >
           <span>📲 نصب اپ / APK</span>
         </button>
       ) : (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-3">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2.5">
               <CircularIcon name="smartphone" size="sm" color="#10b981" />
               <div>
                 <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
-                  نصب روی گوشی (وب‌اپ تمام‌صفحه PWA + فایل نصبی APK اندروید)
+                  نصب روی گوشی (دانلود مستقیم فایل APK اندروید + وب‌اپ تمام‌صفحه)
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  بدون نوار آدرس مرورگر، با آیکون اختصاصی و پشتیبانی آفلاین
+                  ساخته شده به‌صورت خودکار روی گیت‌هاب شما بدون نیاز به هیچ سایت دیگر
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handlePrimaryClick}
-              className="px-3.5 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer whitespace-nowrap shrink-0"
-            >
-              {isInstallable ? 'نصب مستقیم روی گوشی 📲' : 'راهنمای نصب و دریافت APK 📲'}
-            </button>
+            <div className="flex items-center gap-2">
+              <a
+                href={directApkUrl}
+                download="hamhesab.apk"
+                className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5"
+              >
+                <span>دانلود مستقیم APK 📦</span>
+              </a>
+              <button
+                type="button"
+                onClick={handlePrimaryClick}
+                className="px-3.5 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer whitespace-nowrap shrink-0"
+              >
+                {isInstallable ? 'نصب وب‌اپ 📲' : 'راهنمای نصب 📲'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -84,7 +94,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                     نصب اپلیکیشن «هم‌حساب» روی گوشی
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    نصب به صورت وب‌اپ استاندارد (PWA) یا دریافت فایل `.apk` اندروید
+                    دانلود مستقیم فایل `.apk` از گیت‌هاب خودتان یا نصب وب‌اپ (PWA)
                   </p>
                 </div>
               </div>
@@ -97,14 +107,46 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </button>
             </div>
 
-            {/* Method 1: Native PWA Install */}
+            {/* Method 1: Direct Android APK Download from GitHub Pages */}
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                  روش اول: دانلود مستقیم فایل نصبی اندروید (`hamhesab.apk`)
+                </span>
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                  ساخت خودکار در گیت‌هاب شما
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                گیت‌هاب اکشنز (GitHub Actions) در هر بار آپدیت، به‌صورت کاملاً خودکار فایل اندروید{' '}
+                <code className="font-mono font-bold">hamhesab.apk</code> را می‌سازد و امضا می‌کند و مستقیم داخل سایت خودتان قرار می‌دهد (بدون نیاز به هیچ سایت خارجی):
+              </p>
+
+              <a
+                href={directApkUrl}
+                download="hamhesab.apk"
+                className="w-full py-3 px-4 rounded-xl theme-bg text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition-opacity"
+              >
+                <span>دانلود مستقیم فایل hamhesab.apk (اندروید) 📦</span>
+              </a>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                لینک مستقیم دانلود برای ارسال به تلگرام یا واتساپ فاطمه:{' '}
+                <code className="font-mono select-all text-slate-700 dark:text-slate-200">
+                  {githubPagesUrl}hamhesab.apk
+                </code>
+              </p>
+            </div>
+
+            {/* Method 2: Native PWA Install */}
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
-                  روش اول: نصب مستقیم وب‌اپ (PWA تمام‌صفحه)
+                  روش دوم: نصب مستقیم وب‌اپ (PWA تمام‌صفحه برای اندروید و آیفون)
                 </span>
-                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                  پیشنهادی · آپدیت خودکار
+                <span className="text-[11px] font-bold text-sky-500">
+                  بدون نیاز به نصب APK
                 </span>
               </div>
 
@@ -115,9 +157,9 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                     const ok = await install();
                     if (ok) setIsModalOpen(false);
                   }}
-                  className="w-full py-3 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-sm"
+                  className="w-full py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer shadow-sm"
                 >
-                  نصب فوری اپلیکیشن روی صفحه اصلی گوشی 📲
+                  نصب فوری وب‌اپ روی صفحه اصلی گوشی 📲
                 </button>
               ) : isIOS ? (
                 <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 leading-relaxed">
@@ -127,42 +169,11 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 </div>
               ) : (
                 <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 leading-relaxed">
-                  <p>برای نصب روی اندروید (در مرورگر Chrome):</p>
-                  <p>۱. آدرس گیت‌هاب خودتان (<code>{githubPagesUrl}</code>) را در کروم گوشی باز کنید.</p>
-                  <p>۲. روی <strong>منوی سه‌نقطه بالا (⋮)</strong> بزنید و گزینه <strong>Install app (نصب برنامه)</strong> یا <strong>Add to Home screen</strong> را انتخاب کنید تا دقیقاً مثل یک اپ مستقل بدون نوار مرورگر نصب شود.</p>
+                  <p>در مرورگر Chrome گوشی:</p>
+                  <p>۱. آدرس گیت‌هاب خودتان (<code>{githubPagesUrl}</code>) را باز کنید.</p>
+                  <p>۲. روی <strong>منوی سه‌نقطه بالا (⋮)</strong> بزنید و گزینه <strong>Add to Home screen</strong> یا <strong>Install app</strong> را انتخاب کنید.</p>
                 </div>
               )}
-            </div>
-
-            {/* Method 2: Build & Download Real Android APK File */}
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
-                  روش دوم: دریافت فایل نصبی اندروید (`.apk`)
-                </span>
-                <span className="text-[11px] font-bold text-sky-500">
-                  فایل APK مستقل
-                </span>
-              </div>
-
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                ما فایل‌های استاندارد `manifest.json`، آیکون‌های ۵۱۲ پیکسلی و سرویس‌ورکر را به ریپازیتوری گیت‌هاب شما اضافه کردیم. بنابراین می‌توانید با ابزار رسمی و رایگان **PWABuilder مایکروسافت** در ۲۰ ثانیه فایل `.apk` امضاشده بگیرید:
-              </p>
-
-              <ol className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-decimal list-inside leading-relaxed">
-                <li>ابتدا تغییرات جدید را به گیت‌هاب Push کنید تا سایت <code>{finalRepo}</code> آپدیت شود.</li>
-                <li>روی دکمه زیر بزنید تا سایت شما در <strong>PWABuilder</strong> باز شود.</li>
-                <li>روی دکمه <strong>Package for store</strong> و سپس زیر <strong>Android</strong> روی <strong>Download Package</strong> بزنید تا فایل <code>.apk</code> دانلود شود!</li>
-              </ol>
-
-              <a
-                href={pwaBuilderUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-3 px-4 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition-opacity"
-              >
-                <span>ساخت و دانلود فایل APK از PWABuilder (رایگان) 📦</span>
-              </a>
             </div>
           </div>
         </div>

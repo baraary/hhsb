@@ -47,14 +47,19 @@ export function decodeSyncToken(vaultStr?: string): string {
  * e.g. https://hootan.github.io/hhsb/ -> { repoOwner: 'hootan', repoName: 'hhsb' }
  */
 export function detectGitHubPagesRepo(): { repoOwner: string; repoName: string } {
-  if (typeof window === 'undefined') return { repoOwner: '', repoName: '' };
+  if (typeof window === 'undefined') return { repoOwner: 'baraary', repoName: 'hhsb' };
   const host = window.location.hostname.toLowerCase();
+  const protocol = window.location.protocol.toLowerCase();
   const pathParts = window.location.pathname.split('/').filter(Boolean);
 
   if (host.endsWith('.github.io')) {
     const owner = host.replace('.github.io', '');
-    const repo = pathParts[0] || '';
+    const repo = pathParts[0] || 'hhsb';
     return { repoOwner: owner, repoName: repo };
+  }
+  // When running inside the Android APK WebView offline asset fallback (file://)
+  if (protocol === 'file:' || !host) {
+    return { repoOwner: 'baraary', repoName: 'hhsb' };
   }
   return { repoOwner: '', repoName: '' };
 }

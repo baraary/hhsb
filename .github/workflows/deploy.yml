@@ -1,4 +1,4 @@
-name: Deploy HamHesab to GitHub Pages
+name: Deploy HamHesab & Build Android APK to GitHub Pages
 
 on:
   push:
@@ -29,16 +29,25 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup Java JDK 17 for Android APK build
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
       - name: Build static web app
         run: npm run build
 
+      - name: Build Signed Android APK (dist/hamhesab.apk)
+        run: bash scripts/build-apk.sh
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload artifact
+      - name: Upload artifact (Web App + hamhesab.apk)
         uses: actions/upload-pages-artifact@v3
         with:
           path: "./dist"
