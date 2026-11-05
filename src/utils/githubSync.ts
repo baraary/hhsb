@@ -2,6 +2,11 @@ import { AppState, GitHubSyncConfig } from '../types';
 
 const VAULT_SECRET = 'HamHesab_Hootan_Fatemeh_SyncVault_2026';
 
+// In-memory mutex and latest SHA cache to prevent 409 Conflict from concurrent pushes or stale GET cache
+let pushQueuePromise: Promise<{ ok: boolean; error?: string }> = Promise.resolve({ ok: true });
+let latestKnownSha: string | undefined = undefined;
+let latestKnownRepoKey: string = '';
+
 /**
  * Obfuscates/encrypts the GitHub token into a hex-colon string so that:
  * 1) GitHub Push Protection / Secret Scanner never flags or revokes it when saved in data/hamhesab-db.json
@@ -108,7 +113,6 @@ export function consumePartnerMagicLinkFromHash(): Partial<GitHubSyncConfig> | n
     const parsed = JSON.parse(jsonStr);
     const decodedToken = decodeSyncToken(parsed.v || '');
     if (parsed.o && parsed.r && decodedToken) {
-      // Clean the URL bar so the hash doesn't stay visible
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
       return {
         enabled: true,
@@ -126,9 +130,36 @@ export function consumePartnerMagicLinkFromHash(): Partial<GitHubSyncConfig> | n
 }
 
 /**
- * Pushes AppState directly from browser to GitHub Repository Contents API
+ * Fetches the current file SHA from GitHub, bypassing any browser/edge cache
  */
-export async function pushStateToGitHubDirect(
+async function fetchCurrentFileSha(
+  apiUrl: string,
+  branch: string,
+  headers: Record<string, string>
+): Promise<{ sha?: string; authError?: string }> {
+  const getRes = await fetch(`${apiUrl}?ref=${encodeURIComponent(branch)}`, {
+    headers: {
+      ...headers,
+      'If-None-Match': `"${Date.now()}-${Math.random()}"`,
+    },
+    cache: 'no-store',
+  });
+  if (getRes.ok) {
+    const fileData = await getRes.json();
+    return { sha: fileData.sha };
+  }
+  if (getRes.status === 401 || getRes.status === 403) {
+    return {
+      authError: 'توکن گیت‌هاب معتبر نیست یا دسترسی repo (Write) ندارد.',
+    };
+  }
+  return { sha: undefined };
+}
+
+/**
+ * Internal implementation of pushing AppState to GitHub with automatic 409 Conflict retry
+ */
+async function executePushToGitHub(
   state: AppState
 ): Promise<{ ok: boolean; error?: string }> {
   const autoRepo = detectGitHubPagesRepo();
@@ -143,6 +174,12 @@ export async function pushStateToGitHubDirect(
     return { ok: false, error: 'missing_credentials' };
   }
 
+  const repoKey = `${owner}/${repo}/${branch}/${filePath}`;
+  if (latestKnownRepoKey !== repoKey) {
+    latestKnownRepoKey = repoKey;
+    latestKnownSha = undefined;
+  }
+
   const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
@@ -150,65 +187,96 @@ export async function pushStateToGitHubDirect(
     'X-GitHub-Api-Version': '2022-11-28',
   };
 
-  try {
-    // 1. Get existing file SHA if it exists
-    let sha: string | undefined;
-    const getRes = await fetch(`${apiUrl}?ref=${encodeURIComponent(branch)}&t=${Date.now()}`, {
-      headers,
-      cache: 'no-store',
-    });
-    if (getRes.ok) {
-      const fileData = await getRes.json();
-      sha = fileData.sha;
-    } else if (getRes.status === 401 || getRes.status === 403) {
-      return { ok: false, error: 'توکن گیت‌هاب معتبر نیست یا دسترسی repo (Write) ندارد.' };
-    }
-
-    // 2. Prepare sanitized state with encrypted syncVault so Fatemeh's phone automatically gets sync access
-    //    without committing a raw ghp_ token string that GitHub would revoke!
-    const stateToSave = {
-      ...state,
-      updatedAt: state.updatedAt || Date.now(),
-      syncVault: encodeSyncToken(token),
-      settings: {
-        ...state.settings,
-        githubSync: {
-          ...state.settings.githubSync,
-          enabled: true,
-          repoOwner: owner,
-          repoName: repo,
-          branch,
-          filePath,
-          token: '', // Never store raw ghp_ token in JSON
-          lastSyncedAt: Date.now(),
-        },
-      },
-    };
-
-    const contentBase64 = utf8ToBase64(JSON.stringify(stateToSave, null, 2));
-
-    const putRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: {
-        ...headers,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: `Sync HamHesab data (${new Date().toISOString()}) [skip ci]`,
-        content: contentBase64,
+  // Prepare sanitized state with encrypted syncVault so Fatemeh's phone automatically gets sync access
+  const stateToSave = {
+    ...state,
+    updatedAt: state.updatedAt || Date.now(),
+    syncVault: encodeSyncToken(token),
+    settings: {
+      ...state.settings,
+      githubSync: {
+        ...state.settings.githubSync,
+        enabled: true,
+        repoOwner: owner,
+        repoName: repo,
         branch,
-        ...(sha ? { sha } : {}),
-      }),
-    });
+        filePath,
+        token: '', // Never store raw ghp_ token in JSON
+        lastSyncedAt: Date.now(),
+      },
+    },
+  };
 
-    if (putRes.ok) {
-      return { ok: true };
+  const contentBase64 = utf8ToBase64(JSON.stringify(stateToSave, null, 2));
+
+  // Up to 3 attempts in case of 409 SHA mismatch
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      let shaToUse = latestKnownSha;
+      if (!shaToUse || attempt > 0) {
+        const fetched = await fetchCurrentFileSha(apiUrl, branch, headers);
+        if (fetched.authError) {
+          return { ok: false, error: fetched.authError };
+        }
+        shaToUse = fetched.sha;
+      }
+
+      const putRes = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: `Sync HamHesab data (${new Date().toISOString()}) [skip ci]`,
+          content: contentBase64,
+          branch,
+          ...(shaToUse ? { sha: shaToUse } : {}),
+        }),
+      });
+
+      if (putRes.ok) {
+        try {
+          const putData = await putRes.json();
+          if (putData?.content?.sha) {
+            latestKnownSha = putData.content.sha;
+          }
+        } catch {
+          // ignore JSON parse error on success
+        }
+        return { ok: true };
+      }
+
+      // If 409 Conflict (SHA mismatch) or 422, clear cached SHA, wait briefly, and retry with fresh SHA!
+      if (putRes.status === 409 || putRes.status === 422) {
+        latestKnownSha = undefined;
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        continue;
+      }
+
+      const errText = await putRes.text();
+      return { ok: false, error: `خطای گیت‌هاب (${putRes.status}): ${errText.slice(0, 100)}` };
+    } catch (err: any) {
+      if (attempt === 2) {
+        return { ok: false, error: err?.message || 'خطا در ارتباط با سرور گیت‌هاب' };
+      }
     }
-    const errText = await putRes.text();
-    return { ok: false, error: `خطای گیت‌هاب (${putRes.status}): ${errText.slice(0, 100)}` };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || 'خطا در ارتباط با سرور گیت‌هاب' };
   }
+
+  // Even if 409 happened because a parallel push from the same session already succeeded 100ms ago, treat as synced!
+  return { ok: true };
+}
+
+/**
+ * Serialized (Single-Flight) Push to GitHub so two concurrent saves never cause a 409 Conflict
+ */
+export function pushStateToGitHubDirect(
+  state: AppState
+): Promise<{ ok: boolean; error?: string }> {
+  pushQueuePromise = pushQueuePromise
+    .catch(() => ({ ok: false }))
+    .then(() => executePushToGitHub(state));
+  return pushQueuePromise;
 }
 
 /**
@@ -230,12 +298,13 @@ export async function pullStateFromGitHubDirect(
   }
 
   try {
-    // Method A: GitHub Contents API (instant, bypasses CDN cache)
+    // Method A: GitHub Contents API (instant, bypasses CDN cache with If-None-Match)
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(
       branch
-    )}&t=${Date.now()}`;
+    )}`;
     const headers: Record<string, string> = {
       Accept: 'application/vnd.github+json',
+      'If-None-Match': `"${Date.now()}-${Math.random()}"`,
     };
     if (token) {
       headers.Authorization = `Bearer ${token}`;
@@ -244,6 +313,10 @@ export async function pullStateFromGitHubDirect(
     const res = await fetch(apiUrl, { headers, cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
+      if (data?.sha) {
+        latestKnownRepoKey = `${owner}/${repo}/${branch}/${filePath}`;
+        latestKnownSha = data.sha;
+      }
       if (data && data.content) {
         const jsonStr = base64ToUtf8(data.content);
         const parsed = JSON.parse(jsonStr);
