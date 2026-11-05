@@ -3,7 +3,7 @@
   "cards": [
     {
       "id": "card_shared_saman",
-      "title": "سامان مشترک (خرج خونه)",
+      "title": "وی‌پاد",
       "bankId": "pasargad",
       "cardNumber": "5022291617214455",
       "shebaNumber": "IR130570077700014478547001",
@@ -315,7 +315,7 @@
     }
   ],
   "reminders": [],
-  "updatedAt": 1793900324846,
+  "updatedAt": 1793900339769,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
@@ -333,7 +333,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793900325662
+      "lastSyncedAt": 1793900340576
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
