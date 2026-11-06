@@ -556,35 +556,14 @@ export default function App() {
         const delSet = new Set(combinedDeleted);
 
         const remotePin = remoteData.settings?.pinCode || '';
-        if (remotePin || Array.isArray(remoteData.usersRegistry) || delSet.size > 0) {
-          setUsers((prev) => {
-            const map = new Map<string, UserAccount>();
-            for (const u of prev) {
-              if (delSet.has(u.id)) continue;
-              map.set(
-                u.id,
+        if (remotePin || delSet.size > 0) {
+          setUsers((prev) =>
+            prev
+              .filter((u) => !delSet.has(u.id))
+              .map((u) =>
                 u.id === activeUserId && remotePin ? { ...u, pinCode: remotePin } : u
-              );
-            }
-            if (
-              Array.isArray(remoteData.usersRegistry) &&
-              (remoteData.updatedAt || 0) >= (stateRef.current.updatedAt || 0)
-            ) {
-              for (const ru of remoteData.usersRegistry) {
-                if (!ru?.id || delSet.has(ru.id)) continue;
-                const existing = map.get(ru.id);
-                map.set(ru.id, {
-                  ...(existing || {}),
-                  ...ru,
-                  pinCode:
-                    ru.id === activeUserId && remotePin
-                      ? remotePin
-                      : ru.pinCode || existing?.pinCode || '',
-                });
-              }
-            }
-            return Array.from(map.values());
-          });
+              )
+          );
         }
 
         setState((prev) => {

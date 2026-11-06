@@ -33,6 +33,7 @@ export interface ParsedBankSms {
   recordedBy: RecorderId;
   categoryId: string;
   subCategoryId: string;
+  tags: string[];
   note: string;
 }
 
@@ -58,7 +59,7 @@ const BANK_KEYWORDS: { bankId: IranianBankId; name: string; keywords: string[] }
   { bankId: 'mellat', name: 'بانک ملت', keywords: ['بانک ملت', 'ملت', 'به پرداخت', 'mellat', '98200012'] },
   { bankId: 'blu', name: 'بلوبانک', keywords: ['بلوبانک', 'بلو ', 'بلو\n', 'blu', 'blubank'] },
   { bankId: 'saman', name: 'بانک سامان', keywords: ['بانک سامان', 'سامان', 'saman', '9820000842'] },
-  { bankId: 'pasargad', name: 'بانک پاسارگاد', keywords: ['پاسارگاد', 'ویپاد', 'pasargad'] },
+  { bankId: 'pasargad', name: 'بانک پاسارگاد', keywords: ['پاسارگاد', 'ویپاد', 'pasargad', 'wepod'] },
   { bankId: 'melli', name: 'بانک ملی', keywords: ['بانک ملی', 'ملی ایران', 'بام', 'melli'] },
   { bankId: 'tejarat', name: 'بانک تجارت', keywords: ['بانک تجارت', 'تجارت', 'tejarat'] },
   { bankId: 'saderat', name: 'بانک صادرات', keywords: ['بانک صادرات', 'صادرات', 'سپینو', 'saderat'] },
@@ -69,7 +70,7 @@ const BANK_KEYWORDS: { bankId: IranianBankId; name: string; keywords: string[] }
   { bankId: 'parsian', name: 'بانک پارسیان', keywords: ['پارسیان', 'parsian'] },
   { bankId: 'keshavarzi', name: 'بانک کشاورزی', keywords: ['کشاورزی', 'keshavarzi'] },
   { bankId: 'refah', name: 'بانک رفاه', keywords: ['بانک رفاه', 'رفاه کارگران', 'refah'] },
-  { bankId: 'mehr_iran', name: 'مهر ایران', keywords: ['مهر ایران', 'قرض الحسنه مهر'] },
+  { bankId: 'mehr_iran', name: 'مهر ایران', keywords: ['مهر ایران', 'قرض الحسنه مهر', 'بانک مهر'] },
   { bankId: 'shahr', name: 'بانک شهر', keywords: ['بانک شهر', 'همراه شهر'] },
   { bankId: 'gardeshgari', name: 'بانک گردشگری', keywords: ['گردشگری', 'توبانک'] },
   { bankId: 'eghtesad_novin', name: 'اقتصاد نوین', keywords: ['اقتصاد نوین', 'اقتصادنوین'] },
@@ -85,19 +86,32 @@ export function computeSmsHash(text: string): string {
 }
 
 /**
+ * Strips invisible Unicode directional marks (LRM, RLM, LRE, RLE, PDF, etc.) and normalizes digits/commas
+ */
+function normalizeSmsText(rawText: string): string {
+  return toEnglishDigits(rawText || '')
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '')
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/＋/g, '+')
+    .replace(/－|−|–/g, '-')
+    .replace(/٬/g, ',')
+    .replace(/،/g, ',')
+    .trim();
+}
+
+/**
  * Checks if a message looks like an Iranian financial/bank SMS
  */
 export function isLikelyBankSms(text: string, sender?: string): boolean {
-  if (!text || text.trim().length < 12) return false;
-  const normalized = toEnglishDigits(text)
-    .replace(/ي/g, 'ی')
-    .replace(/ك/g, 'ک');
+  if (!text || text.trim().length < 10) return false;
+  const normalized = normalizeSmsText(text);
 
   const hasMoneyWords =
-    /برداشت|واریز|واريز|خرید|خريد|انتقال|مانده|موجودی|حساب|سپرده|کارت|پایا|ساتنا|پل|ریال|ريال|تومان|قسط/.test(
+    /برداشت|واریز|واريز|خرید|خريد|انتقال|مانده|موجودی|موجودي|حساب|سپرده|کارت|پایا|ساتنا|پل|ریال|ريال|تومان|قسط|بستانکار|بدهکار|افزایش|کسر/.test(
       normalized
     );
-  const hasAmountNumber = /\d{1,3}(?:[,،]\d{3})+|\d{5,}/.test(normalized);
+  const hasAmountNumber = /\d{1,3}(?:,\d{3})+|\d{4,}/.test(normalized);
 
   if (sender) {
     const s = sender.toLowerCase();
@@ -143,14 +157,10 @@ export function parseIranianBankSms(
   categories: Category[],
   convertRialToToman = true,
   sender?: string,
-  receivedAtMs?: number
+  receivedAtMs?: number,
+  availableTags: { id: string; name: string }[] = []
 ): ParsedBankSms | null {
-  const normalized = toEnglishDigits(rawText)
-    .replace(/ي/g, 'ی')
-    .replace(/ك/g, 'ک')
-    .replace(/٬/g, ',')
-    .replace(/،/g, ',')
-    .trim();
+  const normalized = normalizeSmsText(rawText);
 
   if (!isLikelyBankSms(normalized, sender)) {
     return null;
@@ -161,32 +171,72 @@ export function parseIranianBankSms(
     .map((l) => l.trim())
     .filter(Boolean);
 
-  // 1. Detect Transaction Type (Expense vs Income)
-  let type: TransactionType = 'expense';
-  const incomeRegex =
-    /واریز|واريز|سود سپرده|سود حساب|برگشت خرید|افزایش موجودی|واریز حقوق|دریافت پایا|دریافت ساتنا|انتقال به حساب شما|\+\s*\d{1,3}(?:,\d{3})+/;
-  const expenseRegex =
-    /برداشت|خرید|خريد|انتقال وجه|کسر از|پرداخت قبض|پرداخت قسط|کارمزد|کارت به کارت|حواله|-\s*\d{1,3}(?:,\d{3})+/;
+  // Filter out balance lines ("مانده: ...", "موجودی قابل برداشت: ...") for transaction type & amount analysis
+  // CRITICAL: "موجودی قابل برداشت" contains the word "برداشت", which previously caused deposits to be misclassified as expenses!
+  const nonBalanceLines = lines.filter(
+    (line) =>
+      !/^(?:مانده|موجودی|موجودي|قابل\s*برداشت|مانده\s*قابل\s*برداشت|موجودی\s*قابل\s*برداشت)/.test(
+        line
+      )
+  );
+  const cleanedForTypeCheck = (nonBalanceLines.length > 0 ? nonBalanceLines : lines)
+    .join('\n')
+    .replace(/(?:مانده|موجودی|موجودي)\s*(?:قابل\s*برداشت)?[^\n]*/g, '')
+    .replace(/قابل\s*برداشت/g, '');
 
-  if (incomeRegex.test(normalized) && !/برداشت|خرید کالا|کسر/.test(normalized)) {
+  // 1. Detect Transaction Type (Income / Deposit vs Expense / Withdrawal)
+  let type: TransactionType = 'expense';
+
+  const incomeWordRegex =
+    /واریز|واريز|بستانکار|افزایش موجودی|افزایش حساب|افزایش|سود سپرده|سود حساب|سود روزشمار|سود ماهانه|برگشت خرید|برگشت وجه|عودت وجه|واریز حقوق|واریز یارانه|دریافت پایا|دریافت ساتنا|دریافت پل|به حساب شما|به کارت شما|حواله وارده|شارژ حساب|شارژ کیف پول|تسهیلات/;
+  const expenseWordRegex =
+    /برداشت|خرید|خريد|کسر از|کسر موجودی|کسر|پرداخت قبض|پرداخت قسط|کارمزد|آبونمان|بدهکار|پایانه فروش|پوز/;
+
+  // Check for + or - attached to an amount on non-balance lines (supports both +1,200,000 and 1,200,000+ in RTL)
+  const hasPlusAmount = nonBalanceLines.some(
+    (line) =>
+      /(?:^|[\s:：])\+\s*(?:\d{1,3}(?:,\d{3})+|\d{4,12})(?:\s|$|ریال|ريال|تومان)/.test(line) ||
+      /(?:^|[\s:：])(?:\d{1,3}(?:,\d{3})+|\d{4,12})\s*\+(?:\s|$|ریال|ريال|تومان)/.test(line) ||
+      /^\+\s*\d/.test(line) ||
+      /\d\s*\+$/.test(line)
+  );
+
+  const hasMinusAmount = nonBalanceLines.some(
+    (line) =>
+      /(?:^|[\s:：])-\s*(?:\d{1,3}(?:,\d{3})+|\d{5,12})(?:\s|$|ریال|ريال|تومان)/.test(line) ||
+      /(?:^|[\s:：])(?:\d{1,3}(?:,\d{3})+|\d{5,12})\s*-(?:\s|$|ریال|ريال|تومان)/.test(line)
+  );
+
+  const incomeMatch = cleanedForTypeCheck.match(incomeWordRegex);
+  const expenseMatch = cleanedForTypeCheck.match(expenseWordRegex);
+
+  if (incomeMatch && !expenseMatch) {
     type = 'income';
-  } else if (expenseRegex.test(normalized)) {
+  } else if (hasPlusAmount && !expenseMatch && !hasMinusAmount) {
+    type = 'income';
+  } else if (incomeMatch && expenseMatch) {
+    // If both words appear, pick whichever appears first in the message body
+    const incIdx = cleanedForTypeCheck.search(incomeWordRegex);
+    const expIdx = cleanedForTypeCheck.search(expenseWordRegex);
+    type = incIdx <= expIdx ? 'income' : 'expense';
+  } else if (hasPlusAmount && !hasMinusAmount) {
+    type = 'income';
+  } else {
     type = 'expense';
   }
 
   // 2. Extract Transaction Amount (ignoring مانده / موجودی / حساب / کارت lines)
   let extractedNumber = 0;
 
-  // Priority A: Look for explicit patterns like "مبلغ: 1,200,000" or "برداشت 450,000" or "واریز: 2,500,000"
+  // Priority A: Look for explicit patterns like "مبلغ: 1,200,000" or "واریز 2,500,000" or "+1,200,000 ریال" or "1,200,000+ ریال"
   const explicitPatterns = [
-    /(?:مبلغ|برداشت|واریز|واريز|خرید|خريد|انتقال|قسط|قبض)\s*[:：-]?\s*([+-]?\d{1,3}(?:,\d{3})+|\d{5,12})/,
-    /([+-]?\d{1,3}(?:,\d{3})+)\s*(?:ریال|ريال|تومان)/,
+    /(?:مبلغ|برداشت|واریز|واريز|خرید|خريد|انتقال|قسط|قبض|افزایش|کسر|بستانکار|بدهکار)\s*[:：-]?\s*[+-]?\s*(\d{1,3}(?:,\d{3})+|\d{4,12})\s*[+-]?/,
+    /[+-]?\s*(\d{1,3}(?:,\d{3})+|\d{4,12})\s*[+-]?\s*(?:ریال|ريال|تومان)/,
+    /(?:^|[\s:：])[+-]\s*(\d{1,3}(?:,\d{3})+|\d{5,12})/,
+    /(\d{1,3}(?:,\d{3})+|\d{5,12})\s*[+-](?:\s|$)/,
   ];
 
-  for (const line of lines) {
-    // Skip balance lines so we never confuse account balance with transaction amount
-    if (/^(?:مانده|موجودی|موجودي|قابل برداشت)/.test(line)) continue;
-
+  for (const line of nonBalanceLines) {
     for (const pat of explicitPatterns) {
       const m = line.match(pat);
       if (m && m[1]) {
@@ -202,8 +252,8 @@ export function parseIranianBankSms(
 
   // Priority B: Any comma-formatted number on a non-balance line
   if (extractedNumber === 0) {
-    for (const line of lines) {
-      if (/مانده|موجودی|موجودي|شبا|کارت|حساب|سپرده/.test(line) && !/برداشت|واریز|مبلغ/.test(line)) {
+    for (const line of nonBalanceLines) {
+      if (/شبا|کارت|حساب|سپرده/.test(line) && !/برداشت|واریز|مبلغ|\+|-/.test(line)) {
         continue;
       }
       const m = line.match(/(\d{1,3}(?:,\d{3})+)/);
@@ -301,26 +351,26 @@ export function parseIranianBankSms(
     time = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2].padStart(2, '0')}`;
   }
 
-  // 5. Smart Title & Category Suggestion
+  // 5. Smart Title, Category, Subcategory & Tags Suggestion
   let title = type === 'expense' ? 'برداشت بانکی (پیامک)' : 'واریز بانکی (پیامک)';
 
-  if (/خرید از\s+([^\n]+)/.test(normalized)) {
+  if (type === 'expense' && /خرید از\s+([^\n]+)/.test(normalized)) {
     const m = normalized.match(/خرید از\s+([^\n]+)/);
     if (m && m[1]) title = `خرید از ${m[1].trim()}`;
-  } else if (/فروشگاه\s+([^\n]+)/.test(normalized)) {
+  } else if (type === 'expense' && /فروشگاه\s+([^\n]+)/.test(normalized)) {
     const m = normalized.match(/فروشگاه\s+([^\n]+)/);
     if (m && m[1]) title = `خرید از فروشگاه ${m[1].trim()}`;
-  } else if (/کارت به کارت|انتقال پل|پایا|ساتنا/.test(normalized)) {
-    title = type === 'expense' ? 'انتقال وجه / کارت به کارت' : 'دریافت حواله / کارت به کارت';
-  } else if (/قسط|وام/.test(normalized)) {
+  } else if (/کارت به کارت|انتقال پل|پایا|ساتنا|حواله/.test(normalized)) {
+    title = type === 'expense' ? 'انتقال وجه / کارت به کارت' : 'دریافت حواله / واریز به حساب';
+  } else if (type === 'expense' && /قسط|وام/.test(normalized)) {
     title = 'پرداخت قسط وام';
-  } else if (/قبض|شارژ/.test(normalized)) {
+  } else if (type === 'expense' && /قبض|شارژ/.test(normalized)) {
     title = 'پرداخت قبض / شارژ';
-  } else if (/حقوق/.test(normalized)) {
+  } else if (type === 'income' && /حقوق/.test(normalized)) {
     title = 'واریز حقوق';
-  } else if (/سود/.test(normalized)) {
+  } else if (type === 'income' && /سود/.test(normalized)) {
     title = 'واریز سود بانکی';
-  } else if (/خرید|پایانه فروش|پوز|pos/i.test(normalized)) {
+  } else if (type === 'expense' && /خرید|پایانه فروش|پوز|pos/i.test(normalized)) {
     title = `خرید کارتی${detectedBankName ? ` (${detectedBankName})` : ''}`;
   } else if (detectedBankName) {
     title = `${type === 'expense' ? 'برداشت از' : 'واریز به'} ${detectedBankName}`;
@@ -329,26 +379,86 @@ export function parseIranianBankSms(
   // Match category & subcategory
   const typeCategories = categories.filter((c) => c.type === type);
   let chosenCat = typeCategories[0] || categories[0];
+  let chosenSub = chosenCat?.subCategories?.[0]?.id || '';
 
   if (type === 'expense') {
     if (/هایپر|سوپر|کوروش|جانبو|میوه|نان|گوشت|پروتئین/.test(normalized)) {
       chosenCat = typeCategories.find((c) => c.id === 'cat_groceries') || chosenCat;
+      if (/میوه/.test(normalized)) {
+        chosenSub = chosenCat?.subCategories?.find((s) => s.id === 'sub_fruit')?.id || chosenCat?.subCategories?.[0]?.id || '';
+      } else if (/نان|شیرینی/.test(normalized)) {
+        chosenSub = chosenCat?.subCategories?.find((s) => s.id === 'sub_bakery')?.id || chosenCat?.subCategories?.[0]?.id || '';
+      } else if (/گوشت|پروتئین/.test(normalized)) {
+        chosenSub = chosenCat?.subCategories?.find((s) => s.id === 'sub_meat')?.id || chosenCat?.subCategories?.[0]?.id || '';
+      } else {
+        chosenSub = chosenCat?.subCategories?.[0]?.id || '';
+      }
     } else if (/رستوران|کافه|اسنپ فود|غذا|پیتزا|کباب/.test(normalized)) {
       chosenCat = typeCategories.find((c) => c.id === 'cat_dining') || chosenCat;
+      if (/کافه|قهوه/.test(normalized)) {
+        chosenSub = chosenCat?.subCategories?.find((s) => s.id === 'sub_cafe')?.id || chosenCat?.subCategories?.[0]?.id || '';
+      } else if (/اسنپ فود/.test(normalized)) {
+        chosenSub = chosenCat?.subCategories?.find((s) => s.id === 'sub_fastfood')?.id || chosenCat?.subCategories?.[0]?.id || '';
+      } else {
+        chosenSub = chosenCat?.subCategories?.[0]?.id || '';
+      }
     } else if (/اسنپ|تپسی|بنزین|سوخت|خودرو|پارکینگ/.test(normalized)) {
       chosenCat = typeCategories.find((c) => c.id === 'cat_transport') || chosenCat;
+      if (/اسنپ|تپسی/.test(normalized)) {
+        chosenSub = chosenCat?.subCategories?.find((s) => s.id === 'sub_taxi')?.id || chosenCat?.subCategories?.[0]?.id || '';
+      } else {
+        chosenSub = chosenCat?.subCategories?.[0]?.id || '';
+      }
     } else if (/داروخانه|پزشک|درمان|آزمایشگاه|بیمارستان/.test(normalized)) {
       chosenCat = typeCategories.find((c) => c.id === 'cat_health') || chosenCat;
+      if (/داروخانه/.test(normalized)) {
+        chosenSub = chosenCat?.subCategories?.find((s) => s.id === 'sub_pharmacy')?.id || chosenCat?.subCategories?.[0]?.id || '';
+      } else {
+        chosenSub = chosenCat?.subCategories?.[0]?.id || '';
+      }
     } else if (/قبض|اجاره|شارژ|قسط/.test(normalized)) {
       chosenCat = typeCategories.find((c) => c.id === 'cat_home') || chosenCat;
+      if (/قبض/.test(normalized)) {
+        chosenSub = chosenCat?.subCategories?.find((s) => s.id === 'sub_bills')?.id || chosenCat?.subCategories?.[0]?.id || '';
+      } else {
+        chosenSub = chosenCat?.subCategories?.[0]?.id || '';
+      }
+    } else {
+      chosenSub = chosenCat?.subCategories?.[0]?.id || '';
     }
   } else {
-    if (/حقوق|پاداش/.test(normalized)) {
+    if (/حقوق|پاداش|عیدی/.test(normalized)) {
       chosenCat = typeCategories.find((c) => c.id === 'cat_salary') || chosenCat;
+      chosenSub = chosenCat?.subCategories?.[0]?.id || '';
+    } else if (/سود/.test(normalized)) {
+      chosenCat =
+        typeCategories.find((c) => c.id === 'cat_freelance') ||
+        typeCategories[0] ||
+        chosenCat;
+      chosenSub =
+        chosenCat?.subCategories?.find((s) => s.id === 'sub_profit')?.id ||
+        chosenCat?.subCategories?.[0]?.id ||
+        '';
+    } else {
+      chosenSub = chosenCat?.subCategories?.[0]?.id || '';
     }
   }
 
-  const chosenSub = chosenCat?.subCategories?.[0]?.id || '';
+  // Suggest initial tags if matching
+  const suggestedTags: string[] = [];
+  if (/قسط|وام/.test(normalized)) {
+    const instTag = availableTags.find(
+      (t) => t.id === 'tag_installment' || t.name.includes('قسط')
+    );
+    if (instTag) suggestedTags.push(instTag.id);
+  }
+  if (/اینترنتی|دیجی|اسنپ|آنلاین/.test(normalized)) {
+    const onlineTag = availableTags.find(
+      (t) => t.id === 'tag_online' || t.name.includes('اینترنتی')
+    );
+    if (onlineTag) suggestedTags.push(onlineTag.id);
+  }
+
   const ownerPerson: PersonId = matchedCard?.owner || 'shared';
   const recorderPerson: RecorderId =
     matchedCard?.owner === 'fatemeh' ? 'fatemeh' : 'hootan';
@@ -372,6 +482,7 @@ export function parseIranianBankSms(
     recordedBy: recorderPerson,
     categoryId: chosenCat?.id || '',
     subCategoryId: chosenSub,
+    tags: suggestedTags,
     note: rawText.trim().replace(/\s+/g, ' ').slice(0, 160),
   };
 }

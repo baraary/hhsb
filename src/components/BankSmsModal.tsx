@@ -57,7 +57,7 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
   onUpdateAutoCheckClipboard,
   initialRawSms = '',
 }) => {
-  const { cards, categories, transactions, importedSmsHashes = [], settings } = state;
+  const { cards, categories, tags = [], transactions, importedSmsHashes = [], settings } = state;
 
   const todayJalali = useMemo(() => getCurrentJalaliDateStr(), [isOpen]);
   const yesterdayJalali = useMemo(
@@ -159,7 +159,15 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
     const results: ParsedBankSms[] = [];
 
     for (const chunk of chunks) {
-      const parsed = parseIranianBankSms(chunk, cards, categories, rialToToman);
+      const parsed = parseIranianBankSms(
+        chunk,
+        cards,
+        categories,
+        rialToToman,
+        undefined,
+        undefined,
+        tags
+      );
       if (parsed) {
         results.push(parsed);
       }
@@ -229,7 +237,8 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
         categories,
         convertRialToToman,
         item.address,
-        item.date
+        item.date,
+        tags
       );
       if (parsed) {
         results.push(parsed);
@@ -308,7 +317,7 @@ ${threeDaysAgo} 18:45
         type: item.type,
         categoryId: item.categoryId,
         subCategoryId: item.subCategoryId,
-        tags: [],
+        tags: item.tags || [],
         spentBy: activeUserId,
         recordedBy: activeUserId,
         cardId: item.matchedCardId,
@@ -334,7 +343,7 @@ ${threeDaysAgo} 18:45
         type: item.type,
         categoryId: item.categoryId,
         subCategoryId: item.subCategoryId,
-        tags: [],
+        tags: item.tags || [],
         spentBy: activeUserId,
         recordedBy: activeUserId,
         cardId: item.matchedCardId,
@@ -586,6 +595,38 @@ ${threeDaysAgo} 18:45
               {filteredParsedItems.map((item, idx) => {
                 const alreadySaved = isAlreadyImported(item.smsHash);
                 const itemCategories = categories.filter((c) => c.type === item.type);
+                const selectedCategoryObj =
+                  itemCategories.find((c) => c.id === item.categoryId) ||
+                  itemCategories[0] ||
+                  categories[0];
+                const subCategoryList = selectedCategoryObj?.subCategories || [];
+
+                const switchItemType = (newType: 'expense' | 'income') => {
+                  if (item.type === newType) return;
+                  const newTypeCats = categories.filter((c) => c.type === newType);
+                  const firstCat = newTypeCats[0] || categories[0];
+                  const firstSub = firstCat?.subCategories?.[0]?.id || '';
+                  let nextTitle = item.title;
+                  if (newType === 'income' && nextTitle.startsWith('برداشت')) {
+                    nextTitle = nextTitle.replace(/^برداشت از/, 'واریز به').replace(/^برداشت/, 'واریز');
+                  } else if (newType === 'expense' && nextTitle.startsWith('واریز')) {
+                    nextTitle = nextTitle.replace(/^واریز به/, 'برداشت از').replace(/^واریز/, 'برداشت');
+                  }
+                  handleUpdateParsedItem(item.smsHash, {
+                    type: newType,
+                    categoryId: firstCat?.id || '',
+                    subCategoryId: firstSub,
+                    title: nextTitle,
+                  });
+                };
+
+                const toggleItemTag = (tagId: string) => {
+                  const currentTags = item.tags || [];
+                  const nextTags = currentTags.includes(tagId)
+                    ? currentTags.filter((id) => id !== tagId)
+                    : [...currentTags, tagId];
+                  handleUpdateParsedItem(item.smsHash, { tags: nextTags });
+                };
 
                 return (
                   <div
@@ -593,26 +634,38 @@ ${threeDaysAgo} 18:45
                     className={`p-4 rounded-2xl border space-y-3 transition-all ${
                       alreadySaved
                         ? 'border-slate-200/60 dark:border-slate-800/60 bg-slate-50/40 dark:bg-slate-800/20 opacity-65'
-                        : 'border-emerald-500/40 bg-emerald-500/5 dark:bg-slate-800/70'
+                        : item.type === 'income'
+                        ? 'border-emerald-500/40 bg-emerald-500/5 dark:bg-slate-800/70'
+                        : 'border-rose-500/35 bg-rose-500/5 dark:bg-slate-800/70'
                     }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleUpdateParsedItem(item.smsHash, {
-                              type: item.type === 'expense' ? 'income' : 'expense',
-                            })
-                          }
-                          className={`px-2.5 py-1 rounded-lg text-xs font-extrabold cursor-pointer ${
-                            item.type === 'expense'
-                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-                              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                          }`}
-                        >
-                          {item.type === 'expense' ? 'برداشت / هزینه' : 'واریز / درآمد'}
-                        </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Explicit 2-button Segmented Switch for Expense vs Income */}
+                        <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-200/70 dark:bg-slate-900 border border-slate-300/60 dark:border-slate-700">
+                          <button
+                            type="button"
+                            onClick={() => switchItemType('expense')}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-extrabold cursor-pointer transition-all ${
+                              item.type === 'expense'
+                                ? 'bg-rose-500 text-white shadow-2xs'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                            }`}
+                          >
+                            برداشت / هزینه
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => switchItemType('income')}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-extrabold cursor-pointer transition-all ${
+                              item.type === 'income'
+                                ? 'bg-emerald-500 text-white shadow-2xs'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                            }`}
+                          >
+                            واریز / درآمد
+                          </button>
+                        </div>
 
                         {item.detectedBankName && (
                           <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
@@ -633,14 +686,15 @@ ${threeDaysAgo} 18:45
                               : 'text-emerald-600 dark:text-emerald-400'
                           }`}
                         >
+                          {item.type === 'income' ? '+' : '-'}
                           {formatMoney(item.amount)} {settings.currencyUnit}
                         </span>
                       </div>
                     </div>
 
-                    {/* Editable Fields before Saving */}
+                    {/* Editable Fields before Saving: Title, Card, Category, Subcategory */}
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                      <div className="sm:col-span-5">
+                      <div className="sm:col-span-4">
                         <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
                           عنوان تراکنش
                         </label>
@@ -650,11 +704,11 @@ ${threeDaysAgo} 18:45
                           onChange={(e) =>
                             handleUpdateParsedItem(item.smsHash, { title: e.target.value })
                           }
-                          className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                          className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
                         />
                       </div>
 
-                      <div className="sm:col-span-4">
+                      <div className="sm:col-span-3">
                         <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
                           کارت بانکی
                         </label>
@@ -665,7 +719,7 @@ ${threeDaysAgo} 18:45
                               matchedCardId: e.target.value,
                             })
                           }
-                          className="w-full px-2 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                          className="w-full px-2 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
                         >
                           {cards.map((c) => (
                             <option key={c.id} value={c.id}>
@@ -675,12 +729,12 @@ ${threeDaysAgo} 18:45
                         </select>
                       </div>
 
-                      <div className="sm:col-span-3">
+                      <div className="sm:col-span-2">
                         <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
                           دسته‌بندی
                         </label>
                         <select
-                          value={item.categoryId}
+                          value={selectedCategoryObj?.id || item.categoryId}
                           onChange={(e) => {
                             const cat = categories.find((c) => c.id === e.target.value);
                             handleUpdateParsedItem(item.smsHash, {
@@ -688,7 +742,7 @@ ${threeDaysAgo} 18:45
                               subCategoryId: cat?.subCategories[0]?.id || '',
                             });
                           }}
-                          className="w-full px-2 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                          className="w-full px-2 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
                         >
                           {itemCategories.map((c) => (
                             <option key={c.id} value={c.id}>
@@ -697,7 +751,68 @@ ${threeDaysAgo} 18:45
                           ))}
                         </select>
                       </div>
+
+                      <div className="sm:col-span-3">
+                        <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
+                          زیردسته
+                        </label>
+                        <select
+                          value={item.subCategoryId || subCategoryList[0]?.id || ''}
+                          onChange={(e) =>
+                            handleUpdateParsedItem(item.smsHash, {
+                              subCategoryId: e.target.value,
+                            })
+                          }
+                          className="w-full px-2 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                        >
+                          {subCategoryList.map((sub) => (
+                            <option key={sub.id} value={sub.id}>
+                              {sub.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
+
+                    {/* Interactive Tags Selector Row */}
+                    {tags.length > 0 && (
+                      <div className="pt-0.5">
+                        <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                          تگ‌ها (انتخاب اختیاری):
+                        </label>
+                        <div
+                          data-no-swipe="true"
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onTouchMove={(e) => e.stopPropagation()}
+                          onTouchEnd={(e) => e.stopPropagation()}
+                          className="flex flex-wrap items-center gap-1.5"
+                        >
+                          {tags.map((tag) => {
+                            const isTagSelected = (item.tags || []).includes(tag.id);
+                            return (
+                              <button
+                                key={tag.id}
+                                type="button"
+                                onClick={() => toggleItemTag(tag.id)}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold cursor-pointer flex items-center gap-1 transition-all ${
+                                  isTagSelected
+                                    ? 'text-white shadow-2xs'
+                                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                                }`}
+                                style={
+                                  isTagSelected
+                                    ? { backgroundColor: tag.color || '#10b981' }
+                                    : undefined
+                                }
+                              >
+                                <span>#{tag.name}</span>
+                                {isTagSelected && <Check size={11} strokeWidth={2.8} />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-[11px] text-slate-400 truncate max-w-xs sm:max-w-md">

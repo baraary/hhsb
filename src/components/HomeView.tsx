@@ -8,6 +8,8 @@ import {
   ArrowLeft,
   RotateCcw,
   Award,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   AppState,
@@ -72,6 +74,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [remCategory, setRemCategory] = useState<DueReminder['category']>('installment');
   const [remRecurrence, setRemRecurrence] = useState<ReminderRecurrence>('monthly');
   const [remTotalInstallmentsStr, setRemTotalInstallmentsStr] = useState('12');
+  const [expandedReminderIds, setExpandedReminderIds] = useState<Record<string, boolean>>({});
+
+  const toggleReminderAccordion = (id: string) => {
+    setExpandedReminderIds((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   const isMonochrome = settings.colorTheme === 'monochrome';
 
@@ -812,159 +822,173 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Recurring Installment Tracker & Check-Off Section */}
+                      {/* Collapsible Accordion (کرکره‌ای) for Installment Tracker & Check-Off Section */}
                       {isRecurring ? (
-                        <div className="p-3 rounded-xl bg-white dark:bg-slate-900/90 border border-slate-200/70 dark:border-slate-800 space-y-2.5">
-                          {/* Paid vs Remaining Counter Row */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs tabular-nums">
-                            <div className="flex items-center gap-3">
+                        <div className="rounded-xl bg-white dark:bg-slate-900/90 border border-slate-200/70 dark:border-slate-800 overflow-hidden">
+                          {/* Compact Always-Visible Accordion Header */}
+                          <button
+                            type="button"
+                            onClick={() => toggleReminderAccordion(rem.id)}
+                            className="w-full px-3 py-2 flex items-center justify-between gap-2 text-xs tabular-nums hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                          >
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 text-right">
                               <span className="font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                <Check size={13} strokeWidth={2.6} />
+                                <Check size={12} strokeWidth={2.6} />
                                 <span>
-                                  پرداخت‌شده: {toPersianDigits(paidCount)}{' '}
-                                  {totalCount > 0 ? `از ${toPersianDigits(totalCount)}` : 'نوبت'}
+                                  {toPersianDigits(paidCount)}
+                                  {totalCount > 0 ? `/${toPersianDigits(totalCount)}` : ' نوبت'} پرداخت‌شده
                                 </span>
                               </span>
 
-                              {remainingCount !== null ? (
-                                <span className="font-extrabold text-amber-600 dark:text-amber-400">
-                                  · مانده: {toPersianDigits(remainingCount)} قسط
+                              {remainingCount !== null && (
+                                <span className="font-bold text-amber-600 dark:text-amber-400 text-[11px]">
+                                  · {toPersianDigits(remainingCount)} مانده
                                 </span>
+                              )}
+
+                              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                                ·{' '}
+                                {rem.isPaid
+                                  ? 'تسویه کامل'
+                                  : `سررسید: ${formatJalaliReadable(rem.dueDate)}`}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                              <span>{expandedReminderIds[rem.id] ? 'بستن' : 'اقساط'}</span>
+                              {expandedReminderIds[rem.id] ? (
+                                <ChevronUp size={14} />
+                              ) : (
+                                <ChevronDown size={14} />
+                              )}
+                            </div>
+                          </button>
+
+                          {/* Expandable Body (Hidden by default to save space) */}
+                          {expandedReminderIds[rem.id] && (
+                            <div className="px-3 pb-3 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                              {/* Progress bar + Remaining Money if totalInstallments is set */}
+                              {totalCount > 0 ? (
+                                <div className="space-y-1">
+                                  <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                                      style={{ width: `${progressPct}%` }}
+                                    />
+                                  </div>
+                                  {remainingCount !== null && remainingCount > 0 && (
+                                    <div className="flex items-center justify-between text-[10px] text-slate-400 tabular-nums">
+                                      <span>پیشرفت اقساط: {toPersianDigits(progressPct)}٪</span>
+                                      <span>
+                                        مبلغ کل باقی‌مانده:{' '}
+                                        {formatMoney(
+                                          remainingCount * rem.amount,
+                                          true,
+                                          settings.currencyUnit
+                                        )}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
                               ) : (
                                 <button
                                   type="button"
                                   onClick={() => handleStartEditReminder(rem)}
-                                  className="text-[11px] font-bold text-sky-500 hover:underline cursor-pointer"
+                                  className="text-[11px] font-bold text-sky-500 hover:underline cursor-pointer block"
                                 >
                                   + تعیین تعداد کل اقساط
                                 </button>
                               )}
-                            </div>
 
-                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                              {rem.isPaid ? (
-                                <>
-                                  <Award size={13} className="text-emerald-500" />
-                                  <span>همه اقساط پرداخت شد</span>
-                                </>
-                              ) : (
-                                <span>سررسید بعدی: {formatJalaliReadable(rem.dueDate)}</span>
-                              )}
-                            </span>
-                          </div>
-
-                          {/* Progress bar + Remaining Money if totalInstallments is set */}
-                          {totalCount > 0 && (
-                            <div className="space-y-1">
-                              <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                              {/* Interactive Checkboxes for Installments (when totalCount <= 36) */}
+                              {totalCount > 0 && totalCount <= 36 && (
                                 <div
-                                  className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                                  style={{ width: `${progressPct}%` }}
-                                />
-                              </div>
-                              {remainingCount !== null && remainingCount > 0 && (
-                                <div className="flex items-center justify-between text-[10px] text-slate-400 tabular-nums">
-                                  <span>پیشرفت اقساط: {toPersianDigits(progressPct)}٪</span>
-                                  <span>
-                                    مبلغ کل باقی‌مانده:{' '}
-                                    {formatMoney(
-                                      remainingCount * rem.amount,
-                                      true,
-                                      settings.currencyUnit
-                                    )}
-                                  </span>
+                                  data-no-swipe="true"
+                                  onTouchStart={(e) => e.stopPropagation()}
+                                  onTouchMove={(e) => e.stopPropagation()}
+                                  onTouchEnd={(e) => e.stopPropagation()}
+                                  className="flex flex-wrap items-center gap-1.5 pt-0.5"
+                                >
+                                  {Array.from({ length: totalCount }, (_, i) => i + 1).map(
+                                    (instNum) => {
+                                      const isChecked = instNum <= paidCount;
+                                      const isNext = instNum === paidCount + 1;
+                                      const isLastChecked = instNum === paidCount;
+
+                                      return (
+                                        <button
+                                          key={instNum}
+                                          type="button"
+                                          onClick={() => {
+                                            if (isNext) {
+                                              onStepReminderInstallment(rem.id, 1);
+                                            } else if (isLastChecked) {
+                                              onStepReminderInstallment(rem.id, -1);
+                                            } else if (!isChecked) {
+                                              onStepReminderInstallment(rem.id, 1);
+                                            }
+                                          }}
+                                          title={
+                                            isChecked
+                                              ? `قسط ${toPersianDigits(instNum)} پرداخت شده (برای لغو کلیک کنید)`
+                                              : `تیک زدن قسط ${toPersianDigits(instNum)}`
+                                          }
+                                          className={`h-7 min-w-[32px] px-1.5 rounded-lg text-[11px] font-extrabold tabular-nums flex items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                                            isChecked
+                                              ? 'bg-emerald-500 text-white shadow-2xs'
+                                              : isNext
+                                              ? 'border-2 border-amber-500 text-amber-600 dark:text-amber-400 bg-amber-500/10'
+                                              : 'border border-slate-200 dark:border-slate-700 text-slate-400 hover:border-slate-400'
+                                          }`}
+                                        >
+                                          <span>{toPersianDigits(instNum)}</span>
+                                          {isChecked && <Check size={11} strokeWidth={2.8} />}
+                                        </button>
+                                      );
+                                    }
+                                  )}
                                 </div>
                               )}
+
+                              {/* Action Buttons to Check Off Next Payment or Undo */}
+                              <div className="flex items-center justify-between gap-2 pt-1">
+                                {!rem.isPaid ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onStepReminderInstallment(rem.id, 1)}
+                                    className="flex-1 py-2 px-3 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs hover:opacity-95"
+                                  >
+                                    <Check size={14} strokeWidth={2.6} />
+                                    <span>
+                                      تیک زدن واریز قسط {toPersianDigits(paidCount + 1)}
+                                      {remainingCount !== null && remainingCount > 0
+                                        ? ` (مانده بعد از این: ${toPersianDigits(
+                                            remainingCount - 1
+                                          )} قسط)`
+                                        : ''}
+                                    </span>
+                                  </button>
+                                ) : (
+                                  <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                    <Award size={14} strokeWidth={2.4} />
+                                    <span>تمام اقساط این تعهد تسویه شده است</span>
+                                  </span>
+                                )}
+
+                                {paidCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onStepReminderInstallment(rem.id, -1)}
+                                    className="px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1"
+                                    title="لغو آخرین تیک واریز و بازگشت قسط"
+                                  >
+                                    <RotateCcw size={12} />
+                                    <span>اصلاح</span>
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           )}
-
-                          {/* Interactive Checkboxes for Installments (when totalCount <= 36) */}
-                          {totalCount > 0 && totalCount <= 36 && (
-                            <div
-                              data-no-swipe="true"
-                              onTouchStart={(e) => e.stopPropagation()}
-                              onTouchMove={(e) => e.stopPropagation()}
-                              onTouchEnd={(e) => e.stopPropagation()}
-                              className="flex flex-wrap items-center gap-1.5 pt-1"
-                            >
-                              {Array.from({ length: totalCount }, (_, i) => i + 1).map(
-                                (instNum) => {
-                                  const isChecked = instNum <= paidCount;
-                                  const isNext = instNum === paidCount + 1;
-                                  const isLastChecked = instNum === paidCount;
-
-                                  return (
-                                    <button
-                                      key={instNum}
-                                      type="button"
-                                      onClick={() => {
-                                        if (isNext) {
-                                          onStepReminderInstallment(rem.id, 1);
-                                        } else if (isLastChecked) {
-                                          onStepReminderInstallment(rem.id, -1);
-                                        } else if (!isChecked) {
-                                          onStepReminderInstallment(rem.id, 1);
-                                        }
-                                      }}
-                                      title={
-                                        isChecked
-                                          ? `قسط ${toPersianDigits(instNum)} پرداخت شده (برای لغو کلیک کنید)`
-                                          : `تیک زدن قسط ${toPersianDigits(instNum)}`
-                                      }
-                                      className={`h-7 min-w-[32px] px-1.5 rounded-lg text-[11px] font-extrabold tabular-nums flex items-center justify-center gap-0.5 transition-all cursor-pointer ${
-                                        isChecked
-                                          ? 'bg-emerald-500 text-white shadow-2xs'
-                                          : isNext
-                                          ? 'border-2 border-amber-500 text-amber-600 dark:text-amber-400 bg-amber-500/10'
-                                          : 'border border-slate-200 dark:border-slate-700 text-slate-400 hover:border-slate-400'
-                                      }`}
-                                    >
-                                      <span>{toPersianDigits(instNum)}</span>
-                                      {isChecked && <Check size={11} strokeWidth={2.8} />}
-                                    </button>
-                                  );
-                                }
-                              )}
-                            </div>
-                          )}
-
-                          {/* Action Buttons to Check Off Next Payment or Undo */}
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            {!rem.isPaid ? (
-                              <button
-                                type="button"
-                                onClick={() => onStepReminderInstallment(rem.id, 1)}
-                                className="flex-1 py-2 px-3 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs hover:opacity-95"
-                              >
-                                <Check size={14} strokeWidth={2.6} />
-                                <span>
-                                  تیک زدن واریز قسط {toPersianDigits(paidCount + 1)}
-                                  {remainingCount !== null && remainingCount > 0
-                                    ? ` (مانده بعد از این: ${toPersianDigits(
-                                        remainingCount - 1
-                                      )} قسط)`
-                                    : ''}
-                                </span>
-                              </button>
-                            ) : (
-                              <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                <Check size={14} strokeWidth={2.6} />
-                                <span>تمام اقساط این تعهد تسویه شده است</span>
-                              </span>
-                            )}
-
-                            {paidCount > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => onStepReminderInstallment(rem.id, -1)}
-                                className="px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1"
-                                title="لغو آخرین تیک واریز و بازگشت قسط"
-                              >
-                                <RotateCcw size={12} />
-                                <span>اصلاح</span>
-                              </button>
-                            )}
-                          </div>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
