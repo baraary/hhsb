@@ -2,6 +2,22 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "خرید ماشین",
+      "amount": 550000000,
+      "type": "expense",
+      "categoryId": "cat_transport",
+      "subCategoryId": "sub_car_service",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987459688",
+      "jalaliDate": "1405/08/14",
+      "time": "09:55",
+      "note": "",
+      "id": "tx_1793989633784",
+      "createdAt": 1793989633784
+    },
+    {
       "title": "برداشت بانکی (پیامک)",
       "amount": 4002150,
       "type": "expense",
@@ -453,7 +469,7 @@
   "importedSmsHashes": [
     "sms_9571578b"
   ],
-  "updatedAt": 1793989466350,
+  "updatedAt": 1793989633784,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -472,7 +488,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793989618757
+      "lastSyncedAt": 1793989634588
     }
   },
   "usersRegistry": [
