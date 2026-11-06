@@ -301,7 +301,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793993534721,
+  "updatedAt": 1793993537292,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -310,7 +310,7 @@
     "currencyUnit": "تومان",
     "darkMode": true,
     "themeMode": "system",
-    "colorTheme": "indigo",
+    "colorTheme": "rose",
     "pinCode": "4786",
     "monthlyTotalBudget": 25000000,
     "githubSync": {
@@ -320,7 +320,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1793993535531
+      "lastSyncedAt": 1793993538099
     }
   },
   "usersRegistry": [
