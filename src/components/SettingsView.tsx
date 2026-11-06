@@ -14,6 +14,7 @@ import {
   Plus,
   X,
   ArrowLeft,
+  Trash2,
 } from 'lucide-react';
 import {
   AppState,
@@ -111,6 +112,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [newUserName, setNewUserName] = useState('');
   const [newUserPin, setNewUserPin] = useState('');
   const [isAddingUser, setIsAddingUser] = useState(false);
+  const [userActionNotice, setUserActionNotice] = useState('');
   const [confirmClearData, setConfirmClearData] = useState(false);
 
   // Category Editor States
@@ -447,10 +449,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   e.preventDefault();
                   const cleanPin = toEnglishDigits(newUserPin).replace(/\D/g, '').slice(0, 4);
                   if (!newUserName.trim() || cleanPin.length !== 4) return;
-                  onCreateUser(newUserName.trim(), cleanPin);
+                  const createdName = newUserName.trim();
+                  onCreateUser(createdName, cleanPin);
                   setNewUserName('');
                   setNewUserPin('');
                   setIsAddingUser(false);
+                  setUserActionNotice(`حساب کاربری «${createdName}» ساخته شد و در سرور ذخیره گردید.`);
+                  setTimeout(() => setUserActionNotice(''), 4000);
                 }}
                 className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
               >
@@ -484,6 +489,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </form>
             )}
 
+            {userActionNotice && (
+              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold text-center">
+                {userActionNotice}
+              </div>
+            )}
+
             {isAdminHootan ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {users.map((u) => {
@@ -492,16 +503,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   return (
                     <div
                       key={u.id}
-                      onClick={() => {
-                        if (!isCurrent) onSwitchUser(u.id);
-                      }}
-                      className={`p-4 rounded-2xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                      className={`p-4 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
                         isCurrent
                           ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500'
                           : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-slate-50/50 dark:bg-slate-800/30'
                       }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!isCurrent) onSwitchUser(u.id);
+                        }}
+                        className="flex items-center gap-3 min-w-0 flex-1 text-right cursor-pointer"
+                      >
                         <div
                           className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-sm shrink-0 shadow-xs"
                           style={{ backgroundColor: u.avatarColor || '#10b981' }}
@@ -535,7 +549,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             )}
                           </div>
                         </div>
-                      </div>
+                      </button>
 
                       {!isCurrent &&
                         onDeleteUser &&
@@ -544,12 +558,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           <button
                             type="button"
                             onClick={(e) => {
+                              e.preventDefault();
                               e.stopPropagation();
                               onDeleteUser(u.id);
+                              setUserActionNotice(`حساب کاربری «${u.name}» به طور کامل حذف شد.`);
+                              setTimeout(() => setUserActionNotice(''), 4000);
                             }}
-                            className="text-xs text-rose-500 hover:underline font-bold px-2 py-1 cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-extrabold flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                            title={`حذف کامل اکانت ${u.name}`}
                           >
-                            حذف
+                            <Trash2 size={13} />
+                            <span>حذف</span>
                           </button>
                         )}
                     </div>

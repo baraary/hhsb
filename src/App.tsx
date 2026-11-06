@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, ChevronDown, Check, Plus, ShieldCheck, Lock, X } from 'lucide-react';
+import { User, ChevronDown, Check, Plus, ShieldCheck, Lock, X, Trash2 } from 'lucide-react';
 import {
   AppState,
   Transaction,
@@ -41,9 +41,11 @@ import {
   pushStateToGitHubDirect,
   pullStateFromGitHubDirect,
   fetchUsersRegistryFromGitHub,
+  deleteUserFileFromGitHub,
 } from './utils/githubSync';
 
 const USERS_REGISTRY_KEY = 'hamhesab_users_registry_v3';
+const DELETED_USERS_KEY = 'hamhesab_deleted_users_v3';
 const ACTIVE_USER_KEY = 'hamhesab_active_user_id_v3';
 const getUserStorageKey = (userId: string) => `hamhesab_isolated_user_v3_${userId}`;
 
@@ -177,13 +179,41 @@ function shouldIgnoreTabSwipe(target: EventTarget | null): boolean {
 }
 
 export default function App() {
+  const [deletedUserIds, setDeletedUserIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(DELETED_USERS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id) => typeof id === 'string' && id !== 'hootan');
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
   const [users, setUsers] = useState<UserAccount[]>(() => {
+    let delSet = new Set<string>();
+    try {
+      const delRaw = localStorage.getItem(DELETED_USERS_KEY);
+      if (delRaw) {
+        const delParsed = JSON.parse(delRaw);
+        if (Array.isArray(delParsed)) {
+          delSet = new Set(delParsed);
+        }
+      }
+    } catch {
+      // ignore
+    }
     try {
       const raw = localStorage.getItem(USERS_REGISTRY_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          const filtered = parsed.filter((u) => u && u.id && !delSet.has(u.id));
+          if (filtered.length > 0) return filtered;
         }
       }
     } catch {
@@ -241,11 +271,32 @@ export default function App() {
   const [isCheckingRemotePin, setIsCheckingRemotePin] = useState<boolean>(false);
   const [remoteTargetPin, setRemoteTargetPin] = useState<string | null>(null);
 
-  // Touch Swipe Refs
+  // Touch Swipe & Sync Refs
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const isApplyingRemoteRef = useRef<boolean>(false);
   const hasUserEditedRef = useRef<boolean>(false);
+  const lastLocalEditAtRef = useRef<number>(0);
+  const stateRef = useRef<AppState>(state);
+  const usersRef = useRef<UserAccount[]>(users);
+  const deletedUserIdsRef = useRef<string[]>(deletedUserIds);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    usersRef.current = users;
+  }, [users]);
+
+  useEffect(() => {
+    deletedUserIdsRef.current = deletedUserIds;
+    try {
+      localStorage.setItem(DELETED_USERS_KEY, JSON.stringify(deletedUserIds));
+    } catch {
+      // ignore
+    }
+  }, [deletedUserIds]);
 
   const isAdminHootan = activeUserId === 'hootan';
 
@@ -314,15 +365,29 @@ export default function App() {
   const pushStateToRemote = useCallback(
     async (
       currentState: AppState,
-      overrideUsers?: UserAccount[]
+      overrideUsers?: UserAccount[],
+      overrideDeletedIds?: string[]
     ): Promise<{ ok: boolean; error?: string }> => {
       setSyncStatus('syncing');
       setSyncErrorMessage('');
 
+      const effectiveDeleted =
+        overrideDeletedIds ||
+        currentState.deletedUserIds ||
+        deletedUserIdsRef.current ||
+        [];
+      const delSet = new Set(effectiveDeleted);
+      const effectiveUsers = (
+        overrideUsers ||
+        currentState.usersRegistry ||
+        usersRef.current
+      ).filter((u) => !delSet.has(u.id));
+
       const userFilePath = `data/users/${currentState.userId || activeUserId}-db.json`;
       const stateWithIsolatedPath: AppState = {
         ...currentState,
-        usersRegistry: overrideUsers || currentState.usersRegistry || users,
+        usersRegistry: effectiveUsers,
+        deletedUserIds: effectiveDeleted,
         settings: {
           ...currentState.settings,
           githubSync: {
@@ -350,69 +415,112 @@ export default function App() {
       setSyncStatus('idle');
       return { ok: false };
     },
-    [activeUserId, users]
+    [activeUserId]
   );
 
   // Pull current user's state from their isolated GitHub file: data/users/${activeUserId}-db.json
+  // NOTE: Uses stateRef so local edits/deletions NEVER re-trigger pullStateFromRemote!
   const pullStateFromRemote = useCallback(async () => {
+    // Do not pull/overwrite while a recent local edit or user deletion is being pushed!
+    if (Date.now() - lastLocalEditAtRef.current < 5000) {
+      return;
+    }
+
+    const currentSnap = stateRef.current;
     try {
       const autoRepo = detectGitHubPagesRepo();
       const repoOwner =
-        state.settings.githubSync?.repoOwner || autoRepo.repoOwner || '';
+        currentSnap.settings.githubSync?.repoOwner || autoRepo.repoOwner || '';
       const repoName =
-        state.settings.githubSync?.repoName || autoRepo.repoName || '';
-      const branch = state.settings.githubSync?.branch || 'main';
-      const token = state.settings.githubSync?.token || '';
+        currentSnap.settings.githubSync?.repoName || autoRepo.repoName || '';
+      const branch = currentSnap.settings.githubSync?.branch || 'main';
+      const token = currentSnap.settings.githubSync?.token || '';
 
-      // 1. Fetch global users registry from GitHub so any newly created accounts appear on all devices!
+      // 1. Fetch global users registry from GitHub so newly created or deleted accounts sync across all devices
       if (repoOwner && repoName) {
-        const remoteUsers = await fetchUsersRegistryFromGitHub(
+        const remoteRegistry = await fetchUsersRegistryFromGitHub(
           repoOwner,
           repoName,
           branch,
           token
         );
-        if (remoteUsers && remoteUsers.length > 0) {
-          setUsers((prev) => {
-            const mergedMap = new Map<string, UserAccount>();
-            for (const u of prev) {
-              mergedMap.set(u.id, u);
-            }
-            for (const ru of remoteUsers) {
-              if (!ru?.id) continue;
-              const existing = mergedMap.get(ru.id);
-              mergedMap.set(ru.id, {
-                ...(existing || {}),
-                ...ru,
-                name: ru.name || existing?.name || ru.id,
-                pinCode: ru.pinCode || existing?.pinCode || '',
-              });
-            }
-            return Array.from(mergedMap.values());
-          });
+
+        // Re-check that no local edit happened while fetch was in flight
+        if (remoteRegistry && Date.now() - lastLocalEditAtRef.current >= 5000) {
+          const combinedDeleted = Array.from(
+            new Set([
+              ...deletedUserIdsRef.current,
+              ...(remoteRegistry.deletedUserIds || []),
+            ])
+          );
+          if (combinedDeleted.length !== deletedUserIdsRef.current.length) {
+            deletedUserIdsRef.current = combinedDeleted;
+            setDeletedUserIds(combinedDeleted);
+          }
+          const delSet = new Set(combinedDeleted);
+
+          if (remoteRegistry.users.length > 0 || delSet.size > 0) {
+            setUsers((prev) => {
+              // If Hootan's remote file has an authoritative usersRegistry, use it as the source of truth
+              // so deleted accounts disappear on all devices too!
+              if (remoteRegistry.hasAuthoritativeRegistry && remoteRegistry.users.length > 0) {
+                const prevMap = new Map(prev.map((u) => [u.id, u]));
+                const nextList: UserAccount[] = [];
+                for (const ru of remoteRegistry.users) {
+                  if (!ru?.id || delSet.has(ru.id)) continue;
+                  const existing = prevMap.get(ru.id);
+                  nextList.push({
+                    ...(existing || {}),
+                    ...ru,
+                    name: ru.name || existing?.name || ru.id,
+                    pinCode: ru.pinCode || existing?.pinCode || '',
+                  });
+                }
+                return nextList.length > 0 ? nextList : prev.filter((u) => !delSet.has(u.id));
+              }
+
+              const mergedMap = new Map<string, UserAccount>();
+              for (const u of prev) {
+                if (!delSet.has(u.id)) {
+                  mergedMap.set(u.id, u);
+                }
+              }
+              for (const ru of remoteRegistry.users) {
+                if (!ru?.id || delSet.has(ru.id)) continue;
+                const existing = mergedMap.get(ru.id);
+                mergedMap.set(ru.id, {
+                  ...(existing || {}),
+                  ...ru,
+                  name: ru.name || existing?.name || ru.id,
+                  pinCode: ru.pinCode || existing?.pinCode || '',
+                });
+              }
+              return Array.from(mergedMap.values());
+            });
+          }
         }
       }
 
-      const userFilePath = `data/users/${state.userId || activeUserId}-db.json`;
+      const userFilePath = `data/users/${currentSnap.userId || activeUserId}-db.json`;
       const stateToQuery: AppState = {
-        ...state,
+        ...currentSnap,
         settings: {
-          ...state.settings,
+          ...currentSnap.settings,
           githubSync: {
-            ...state.settings.githubSync!,
+            ...currentSnap.settings.githubSync!,
             filePath: userFilePath,
           },
         },
       };
 
       let recoveredLegacyToken = '';
-      if (!state.settings.githubSync?.token?.trim()) {
+      if (!currentSnap.settings.githubSync?.token?.trim()) {
         const legacyQuery: AppState = {
-          ...state,
+          ...currentSnap,
           settings: {
-            ...state.settings,
+            ...currentSnap.settings,
             githubSync: {
-              ...state.settings.githubSync!,
+              ...currentSnap.settings.githubSync!,
               filePath: 'data/hamhesab-db.json',
             },
           },
@@ -424,25 +532,46 @@ export default function App() {
       }
 
       const ghPull = await pullStateFromGitHubDirect(stateToQuery);
+      if (Date.now() - lastLocalEditAtRef.current < 5000) {
+        return;
+      }
+
       if (ghPull.ok && ghPull.remoteState) {
         const remoteData = ghPull.remoteState;
         if (remoteData.userId && remoteData.userId !== activeUserId) {
           setIsInitialRemoteCheckDone(true);
           return;
         }
+
+        const combinedDeleted = Array.from(
+          new Set([
+            ...deletedUserIdsRef.current,
+            ...(Array.isArray(remoteData.deletedUserIds) ? remoteData.deletedUserIds : []),
+          ])
+        );
+        if (combinedDeleted.length !== deletedUserIdsRef.current.length) {
+          deletedUserIdsRef.current = combinedDeleted;
+          setDeletedUserIds(combinedDeleted);
+        }
+        const delSet = new Set(combinedDeleted);
+
         const remotePin = remoteData.settings?.pinCode || '';
-        if (remotePin || Array.isArray(remoteData.usersRegistry)) {
+        if (remotePin || Array.isArray(remoteData.usersRegistry) || delSet.size > 0) {
           setUsers((prev) => {
             const map = new Map<string, UserAccount>();
             for (const u of prev) {
+              if (delSet.has(u.id)) continue;
               map.set(
                 u.id,
                 u.id === activeUserId && remotePin ? { ...u, pinCode: remotePin } : u
               );
             }
-            if (Array.isArray(remoteData.usersRegistry)) {
+            if (
+              Array.isArray(remoteData.usersRegistry) &&
+              (remoteData.updatedAt || 0) >= (stateRef.current.updatedAt || 0)
+            ) {
               for (const ru of remoteData.usersRegistry) {
-                if (!ru?.id) continue;
+                if (!ru?.id || delSet.has(ru.id)) continue;
                 const existing = map.get(ru.id);
                 map.set(ru.id, {
                   ...(existing || {}),
@@ -476,6 +605,10 @@ export default function App() {
               ...prev,
               ...remoteData,
               userId: activeUserId,
+              deletedUserIds: combinedDeleted,
+              usersRegistry: Array.isArray(remoteData.usersRegistry)
+                ? remoteData.usersRegistry.filter((u) => u && !delSet.has(u.id))
+                : prev.usersRegistry,
               settings: {
                 ...prev.settings,
                 ...(remoteData.settings || {}),
@@ -539,7 +672,7 @@ export default function App() {
     } finally {
       setIsInitialRemoteCheckDone(true);
     }
-  }, [state, activeUserId]);
+  }, [activeUserId]);
 
   useEffect(() => {
     pullStateFromRemote();
@@ -667,6 +800,7 @@ export default function App() {
     const cleanPin = toEnglishDigits(initialPin || '').replace(/\D/g, '').slice(0, 4);
     if (!cleanName || cleanPin.length !== 4) return;
 
+    lastLocalEditAtRef.current = Date.now();
     const newId = `user_${Date.now()}`;
     const newUser: UserAccount = {
       id: newId,
@@ -676,21 +810,30 @@ export default function App() {
       pinCode: cleanPin,
     };
     const updatedUsers = [...users, newUser];
+    usersRef.current = updatedUsers;
     setUsers(updatedUsers);
+    try {
+      localStorage.setItem(USERS_REGISTRY_KEY, JSON.stringify(updatedUsers));
+    } catch {
+      // ignore
+    }
 
     const freshState = loadIsolatedUserState(newUser);
     freshState.settings.pinCode = cleanPin;
     freshState.usersRegistry = updatedUsers;
+    freshState.deletedUserIds = deletedUserIdsRef.current;
     freshState.updatedAt = Date.now();
     localStorage.setItem(getUserStorageKey(newId), JSON.stringify(freshState));
 
     // Also update Hootan's state with the new usersRegistry and push both to GitHub so any device opening the link sees the new user!
-    hasUserEditedRef.current = true;
     const updatedAdminState: AppState = {
       ...state,
       usersRegistry: updatedUsers,
+      deletedUserIds: deletedUserIdsRef.current,
       updatedAt: Date.now(),
     };
+    stateRef.current = updatedAdminState;
+    isApplyingRemoteRef.current = true;
     setState(updatedAdminState);
 
     if (state.settings.githubSync?.token) {
@@ -699,7 +842,7 @@ export default function App() {
         filePath: `data/users/${newId}-db.json`,
       };
       pushStateToGitHubDirect(freshState);
-      pushStateToRemote(updatedAdminState, updatedUsers);
+      pushStateToRemote(updatedAdminState, updatedUsers, deletedUserIdsRef.current);
     }
 
     setUserCreatedToast(`حساب مستقل «${cleanName}» با رمز ۴ رقمی ساخته و در سرور همگام‌سازی شد.`);
@@ -709,19 +852,56 @@ export default function App() {
   const handleDeleteUser = (userIdToDelete: string) => {
     if (activeUserId !== 'hootan') return;
     if (users.length <= 1 || userIdToDelete === 'hootan') return;
-    const remaining = users.filter((u) => u.id !== userIdToDelete);
-    setUsers(remaining);
-    localStorage.removeItem(getUserStorageKey(userIdToDelete));
 
-    hasUserEditedRef.current = true;
+    lastLocalEditAtRef.current = Date.now();
+    const deletedUserObj = users.find((u) => u.id === userIdToDelete);
+    const updatedDeletedIds = Array.from(
+      new Set([...deletedUserIdsRef.current, userIdToDelete])
+    );
+    deletedUserIdsRef.current = updatedDeletedIds;
+    setDeletedUserIds(updatedDeletedIds);
+    try {
+      localStorage.setItem(DELETED_USERS_KEY, JSON.stringify(updatedDeletedIds));
+    } catch {
+      // ignore
+    }
+
+    const remaining = users.filter((u) => u.id !== userIdToDelete);
+    usersRef.current = remaining;
+    setUsers(remaining);
+    try {
+      localStorage.setItem(USERS_REGISTRY_KEY, JSON.stringify(remaining));
+      localStorage.removeItem(getUserStorageKey(userIdToDelete));
+    } catch {
+      // ignore
+    }
+
     const updatedAdminState: AppState = {
       ...state,
       usersRegistry: remaining,
+      deletedUserIds: updatedDeletedIds,
       updatedAt: Date.now(),
     };
+    stateRef.current = updatedAdminState;
+    isApplyingRemoteRef.current = true;
     setState(updatedAdminState);
-    if (state.settings.githubSync?.token) {
-      pushStateToRemote(updatedAdminState, remaining);
+
+    const syncCfg = state.settings.githubSync;
+    const autoRepo = detectGitHubPagesRepo();
+    if (syncCfg?.token) {
+      deleteUserFileFromGitHub(
+        syncCfg.repoOwner || autoRepo.repoOwner,
+        syncCfg.repoName || autoRepo.repoName,
+        syncCfg.branch || 'main',
+        syncCfg.token,
+        userIdToDelete
+      );
+      pushStateToRemote(updatedAdminState, remaining, updatedDeletedIds);
+    }
+
+    if (deletedUserObj) {
+      setUserCreatedToast(`حساب کاربری «${deletedUserObj.name}» به طور کامل حذف شد.`);
+      setTimeout(() => setUserCreatedToast(''), 4000);
     }
   };
 
@@ -734,6 +914,7 @@ export default function App() {
     if (!hasUserEditedRef.current) {
       return;
     }
+    lastLocalEditAtRef.current = Date.now();
     const timer = setTimeout(() => {
       pushStateToRemote(state);
     }, 800);
@@ -1458,28 +1639,52 @@ export default function App() {
                 </span>
                 {users.map((u) => {
                   const isCurrent = u.id === activeUserId;
+                  const canDeleteThisUser =
+                    isAdminHootan &&
+                    !isCurrent &&
+                    u.id !== 'hootan' &&
+                    u.id !== 'fatemeh';
                   return (
-                    <button
+                    <div
                       key={u.id}
-                      type="button"
-                      onClick={() => handleRequestSwitchUser(u.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                        isCurrent
-                          ? 'theme-bg text-white shadow-xs'
-                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
-                      }`}
+                      className="inline-flex items-center gap-1"
                     >
-                      {isCurrent ? (
-                        <User size={13} strokeWidth={2.3} />
-                      ) : (
-                        <Lock size={12} strokeWidth={2.3} />
+                      <button
+                        type="button"
+                        onClick={() => handleRequestSwitchUser(u.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          isCurrent
+                            ? 'theme-bg text-white shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        {isCurrent ? (
+                          <User size={13} strokeWidth={2.3} />
+                        ) : (
+                          <Lock size={12} strokeWidth={2.3} />
+                        )}
+                        <span>{u.name}</span>
+                        {u.id === 'hootan' && (
+                          <ShieldCheck size={12} className="opacity-80" />
+                        )}
+                        {isCurrent && <Check size={13} strokeWidth={2.6} />}
+                      </button>
+
+                      {canDeleteThisUser && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteUser(u.id);
+                          }}
+                          title={`حذف اکانت ${u.name}`}
+                          className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 cursor-pointer transition-colors"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       )}
-                      <span>{u.name}</span>
-                      {u.id === 'hootan' && (
-                        <ShieldCheck size={12} className="opacity-80" />
-                      )}
-                      {isCurrent && <Check size={13} strokeWidth={2.6} />}
-                    </button>
+                    </div>
                   );
                 })}
 

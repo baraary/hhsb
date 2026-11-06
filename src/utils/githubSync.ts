@@ -350,22 +350,94 @@ export async function pullStateFromGitHubDirect(
 }
 
 /**
- * Fetches all registered user accounts from GitHub (`data/users/hootan-db.json` usersRegistry
- * plus any `data/users/*-db.json` files in the repository) so newly created accounts
- * appear on every device/browser when opening the app link.
+ * Deletes a user's isolated JSON file (`data/users/${userId}-db.json`) from the GitHub repository
+ * when the admin (Hootan) deletes that user account.
+ */
+export function deleteUserFileFromGitHub(
+  repoOwner?: string,
+  repoName?: string,
+  branch = 'main',
+  token?: string,
+  userIdToDelete?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const runDelete = async (): Promise<{ ok: boolean; error?: string }> => {
+    const autoRepo = detectGitHubPagesRepo();
+    const owner = repoOwner?.trim() || autoRepo.repoOwner || 'baraary';
+    const repo = repoName?.trim() || autoRepo.repoName || 'hhsb';
+    const cleanToken = token?.trim() || '';
+    if (!owner || !repo || !cleanToken || !userIdToDelete || userIdToDelete === 'hootan') {
+      return { ok: false };
+    }
+
+    const filePath = `data/users/${userIdToDelete}-db.json`;
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${cleanToken}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+
+    try {
+      const fetched = await fetchCurrentFileSha(apiUrl, branch, headers);
+      if (!fetched.sha) {
+        return { ok: true }; // File doesn't exist on remote
+      }
+
+      const delRes = await fetch(apiUrl, {
+        method: 'DELETE',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: `Remove deleted user ${userIdToDelete} [skip ci]`,
+          sha: fetched.sha,
+          branch,
+        }),
+      });
+
+      if (delRes.ok || delRes.status === 404) {
+        if (latestKnownRepoKey === `${owner}/${repo}/${branch}/${filePath}`) {
+          latestKnownSha = undefined;
+        }
+        return { ok: true };
+      }
+    } catch {
+      // ignore network error
+    }
+    return { ok: false };
+  };
+
+  pushQueuePromise = pushQueuePromise
+    .catch(() => ({ ok: false }))
+    .then(() => runDelete());
+  return pushQueuePromise;
+}
+
+export interface RemoteUsersRegistryResult {
+  users: import('../types').UserAccount[];
+  deletedUserIds: string[];
+  hasAuthoritativeRegistry: boolean;
+}
+
+/**
+ * Fetches all registered user accounts from GitHub (`data/users/hootan-db.json` usersRegistry)
+ * while strictly respecting `deletedUserIds` so deleted accounts are never resurrected.
  */
 export async function fetchUsersRegistryFromGitHub(
   repoOwner?: string,
   repoName?: string,
   branch = 'main',
   token?: string
-): Promise<import('../types').UserAccount[] | null> {
+): Promise<RemoteUsersRegistryResult | null> {
   const autoRepo = detectGitHubPagesRepo();
   const owner = repoOwner?.trim() || autoRepo.repoOwner || 'baraary';
   const repo = repoName?.trim() || autoRepo.repoName || 'hhsb';
   if (!owner || !repo) return null;
 
   const discoveredMap = new Map<string, import('../types').UserAccount>();
+  const deletedSet = new Set<string>();
+  let hasAuthoritativeRegistry = false;
   const palette = ['#10b981', '#f43f5e', '#0ea5e9', '#8b5cf6', '#f59e0b', '#06b6d4'];
 
   const headers: Record<string, string> = {
@@ -377,7 +449,8 @@ export async function fetchUsersRegistryFromGitHub(
   }
 
   try {
-    // 1. Check Hootan's master admin file for `usersRegistry`
+    // 1. Check Hootan's master admin file for authoritative `usersRegistry` and `deletedUserIds`
+    let hootanParsed: any = null;
     const hootanUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/users/hootan-db.json?ref=${encodeURIComponent(
       branch
     )}`;
@@ -385,63 +458,84 @@ export async function fetchUsersRegistryFromGitHub(
     if (hRes.ok) {
       const hData = await hRes.json();
       if (hData?.content) {
-        const parsed = JSON.parse(base64ToUtf8(hData.content));
-        if (Array.isArray(parsed?.usersRegistry)) {
-          for (const u of parsed.usersRegistry) {
-            if (u && u.id && u.name) {
-              discoveredMap.set(u.id, u);
-            }
-          }
-        }
-        if (parsed?.settings?.pinCode && discoveredMap.has('hootan')) {
-          const hUser = discoveredMap.get('hootan')!;
-          discoveredMap.set('hootan', { ...hUser, pinCode: parsed.settings.pinCode });
-        }
+        hootanParsed = JSON.parse(base64ToUtf8(hData.content));
+      }
+    } else {
+      const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/data/users/hootan-db.json?t=${Date.now()}`;
+      const rawRes = await fetch(rawUrl, { cache: 'no-store' });
+      if (rawRes.ok) {
+        hootanParsed = await rawRes.json();
       }
     }
 
-    // 2. Also scan `data/users/` directory on GitHub for any `*-db.json` user files
-    const dirUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/users?ref=${encodeURIComponent(
-      branch
-    )}`;
-    const dirRes = await fetch(dirUrl, { headers, cache: 'no-store' });
-    if (dirRes.ok) {
-      const files = await dirRes.json();
-      if (Array.isArray(files)) {
-        for (const f of files) {
-          if (typeof f?.name === 'string' && f.name.endsWith('-db.json')) {
-            const userId = f.name.replace(/-db\.json$/, '');
-            if (!discoveredMap.has(userId)) {
-              // Fetch the user file to get its display name and PIN
-              const fileRes = await fetch(
-                `https://api.github.com/repos/${owner}/${repo}/contents/data/users/${f.name}?ref=${encodeURIComponent(
-                  branch
-                )}`,
-                { headers, cache: 'no-store' }
-              );
-              if (fileRes.ok) {
-                const fileJson = await fileRes.json();
-                if (fileJson?.content) {
-                  const userState = JSON.parse(base64ToUtf8(fileJson.content));
-                  const name =
-                    userState?.settings?.userName ||
-                    (userId === 'hootan'
-                      ? 'هوتن'
-                      : userId === 'fatemeh'
-                      ? 'فاطمه'
-                      : userId);
-                  discoveredMap.set(userId, {
-                    id: userId,
-                    name,
-                    avatarColor:
-                      userId === 'hootan'
-                        ? '#10b981'
+    if (hootanParsed) {
+      if (Array.isArray(hootanParsed.deletedUserIds)) {
+        for (const delId of hootanParsed.deletedUserIds) {
+          if (typeof delId === 'string' && delId !== 'hootan') {
+            deletedSet.add(delId);
+          }
+        }
+      }
+
+      if (Array.isArray(hootanParsed.usersRegistry) && hootanParsed.usersRegistry.length > 0) {
+        hasAuthoritativeRegistry = true;
+        for (const u of hootanParsed.usersRegistry) {
+          if (u && u.id && u.name && !deletedSet.has(u.id)) {
+            discoveredMap.set(u.id, u);
+          }
+        }
+      }
+
+      if (hootanParsed?.settings?.pinCode && discoveredMap.has('hootan')) {
+        const hUser = discoveredMap.get('hootan')!;
+        discoveredMap.set('hootan', { ...hUser, pinCode: hootanParsed.settings.pinCode });
+      }
+    }
+
+    // 2. ONLY scan `data/users/` directory if `hootan-db.json` does not have an authoritative `usersRegistry` yet.
+    // This guarantees that once Hootan manages users, any deleted user is never resurrected by directory scanning.
+    if (!hasAuthoritativeRegistry) {
+      const dirUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/users?ref=${encodeURIComponent(
+        branch
+      )}`;
+      const dirRes = await fetch(dirUrl, { headers, cache: 'no-store' });
+      if (dirRes.ok) {
+        const files = await dirRes.json();
+        if (Array.isArray(files)) {
+          for (const f of files) {
+            if (typeof f?.name === 'string' && f.name.endsWith('-db.json')) {
+              const userId = f.name.replace(/-db\.json$/, '');
+              if (!discoveredMap.has(userId) && !deletedSet.has(userId)) {
+                const fileRes = await fetch(
+                  `https://api.github.com/repos/${owner}/${repo}/contents/data/users/${f.name}?ref=${encodeURIComponent(
+                    branch
+                  )}`,
+                  { headers, cache: 'no-store' }
+                );
+                if (fileRes.ok) {
+                  const fileJson = await fileRes.json();
+                  if (fileJson?.content) {
+                    const userState = JSON.parse(base64ToUtf8(fileJson.content));
+                    const name =
+                      userState?.settings?.userName ||
+                      (userId === 'hootan'
+                        ? 'هوتن'
                         : userId === 'fatemeh'
-                        ? '#f43f5e'
-                        : palette[discoveredMap.size % palette.length],
-                    createdAt: userState?.updatedAt || Date.now(),
-                    pinCode: userState?.settings?.pinCode || '',
-                  });
+                        ? 'فاطمه'
+                        : userId);
+                    discoveredMap.set(userId, {
+                      id: userId,
+                      name,
+                      avatarColor:
+                        userId === 'hootan'
+                          ? '#10b981'
+                          : userId === 'fatemeh'
+                          ? '#f43f5e'
+                          : palette[discoveredMap.size % palette.length],
+                      createdAt: userState?.updatedAt || Date.now(),
+                      pinCode: userState?.settings?.pinCode || '',
+                    });
+                  }
                 }
               }
             }
@@ -453,5 +547,11 @@ export async function fetchUsersRegistryFromGitHub(
     // ignore network errors
   }
 
-  return discoveredMap.size > 0 ? Array.from(discoveredMap.values()) : null;
+  return discoveredMap.size > 0 || deletedSet.size > 0
+    ? {
+        users: Array.from(discoveredMap.values()),
+        deletedUserIds: Array.from(deletedSet),
+        hasAuthoritativeRegistry,
+      }
+    : null;
 }
