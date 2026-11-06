@@ -68,6 +68,7 @@ export interface UserAccount {
   avatarColor: string;
   createdAt: number;
   isAdmin?: boolean;
+  pinCode?: string;
 }
 
 export interface SubCategory {

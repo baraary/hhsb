@@ -87,17 +87,39 @@
     --theme-text-color: #18181b;
     --theme-gradient-from: #3f3f46;
     --theme-gradient-to: #18181b;
+    --color-slate-50: #fafafa;
+    --color-slate-100: #f4f4f5;
+    --color-slate-200: #e4e4e7;
+    --color-slate-300: #d4d4d8;
+    --color-slate-400: #a1a1aa;
+    --color-slate-500: #71717a;
+    --color-slate-600: #52525b;
+    --color-slate-700: #3f3f46;
+    --color-slate-800: #27272a;
+    --color-slate-900: #18181b;
+    --color-slate-950: #09090b;
   }
 
-  /* Monochrome Dark Mode: Brushed Titanium & Silver High-Contrast */
+  /* Monochrome Dark Mode: Pure Carbon, Graphite & Brushed Titanium (Zero Navy/Blue) */
   .dark[data-color-theme="monochrome"] {
     --theme-primary: #52525b;
     --theme-primary-hover: #71717a;
-    --theme-primary-soft: rgba(212, 212, 216, 0.15);
+    --theme-primary-soft: rgba(212, 212, 216, 0.14);
     --theme-accent: #d4d4d8;
     --theme-text-color: #f4f4f5;
-    --theme-gradient-from: #52525b;
-    --theme-gradient-to: #27272a;
+    --theme-gradient-from: #3f3f46;
+    --theme-gradient-to: #18181b;
+    --color-slate-50: #fafafa;
+    --color-slate-100: #f4f4f5;
+    --color-slate-200: #e4e4e7;
+    --color-slate-300: #d4d4d8;
+    --color-slate-400: #a1a1aa;
+    --color-slate-500: #71717a;
+    --color-slate-600: #52525b;
+    --color-slate-700: #3f3f46;
+    --color-slate-800: #27272a;
+    --color-slate-900: #18181b;
+    --color-slate-950: #09090b;
   }
 
   [data-color-theme="coral"] {
@@ -180,10 +202,32 @@
   filter: grayscale(100%);
 }
 
-/* Monochrome Dark Mode Surface Separation */
+/* Monochrome Dark Mode Complete Neutral Overrides (Eliminate all navy/blue slate tints) */
+[data-color-theme="monochrome"],
+[data-color-theme="monochrome"] * {
+  --color-slate-50: #fafafa;
+  --color-slate-100: #f4f4f5;
+  --color-slate-200: #e4e4e7;
+  --color-slate-300: #d4d4d8;
+  --color-slate-400: #a1a1aa;
+  --color-slate-500: #71717a;
+  --color-slate-600: #52525b;
+  --color-slate-700: #3f3f46;
+  --color-slate-800: #27272a;
+  --color-slate-900: #18181b;
+  --color-slate-950: #09090b;
+}
+
+.dark[data-color-theme="monochrome"],
+.dark[data-color-theme="monochrome"] body,
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-950,
+.dark[data-color-theme="monochrome"] .bg-slate-950 {
+  background-color: #09090b !important;
+}
+
 .dark[data-color-theme="monochrome"] .theme-gradient {
-  background-image: linear-gradient(135deg, #52525b 0%, #3f3f46 55%, #27272a 100%);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background-image: linear-gradient(135deg, #3f3f46 0%, #27272a 55%, #18181b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.7);
 }
 
@@ -192,18 +236,58 @@
   border: 1px solid rgba(255, 255, 255, 0.22);
 }
 
-.dark[data-color-theme="monochrome"] .dark\:bg-slate-900 {
-  background-color: #18181b !important;
-  border-color: #3f3f46 !important;
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-900,
+.dark[data-color-theme="monochrome"] .bg-slate-900 {
+  background-color: #141417 !important;
+  border-color: #2e2e33 !important;
+}
+
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-900\/95,
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-900\/90,
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-900\/80,
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-900\/70 {
+  background-color: rgba(20, 20, 23, 0.92) !important;
+  border-color: #2e2e33 !important;
 }
 
 .dark[data-color-theme="monochrome"] .dark\:bg-slate-800,
+.dark[data-color-theme="monochrome"] .bg-slate-800 {
+  background-color: #222226 !important;
+  border-color: #3f3f46 !important;
+}
+
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-800\/20,
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-800\/25,
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-800\/30,
 .dark[data-color-theme="monochrome"] .dark\:bg-slate-800\/40,
 .dark[data-color-theme="monochrome"] .dark\:bg-slate-800\/50,
 .dark[data-color-theme="monochrome"] .dark\:bg-slate-800\/60,
-.dark[data-color-theme="monochrome"] .dark\:bg-slate-800\/70 {
-  background-color: #27272a !important;
-  border-color: #52525b !important;
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-800\/70,
+.dark[data-color-theme="monochrome"] .dark\:bg-slate-800\/80 {
+  background-color: rgba(39, 39, 42, 0.65) !important;
+  border-color: #3f3f46 !important;
+}
+
+.dark[data-color-theme="monochrome"] .dark\:border-slate-800,
+.dark[data-color-theme="monochrome"] .dark\:border-slate-800\/80,
+.dark[data-color-theme="monochrome"] .dark\:border-slate-800\/70,
+.dark[data-color-theme="monochrome"] .dark\:border-slate-800\/60,
+.dark[data-color-theme="monochrome"] .dark\:border-slate-700,
+.dark[data-color-theme="monochrome"] .dark\:border-slate-700\/70,
+.dark[data-color-theme="monochrome"] .dark\:border-slate-700\/60,
+.dark[data-color-theme="monochrome"] .border-slate-800,
+.dark[data-color-theme="monochrome"] .border-slate-700 {
+  border-color: #2e2e33 !important;
+}
+
+/* Neutralize colored callout boxes in Monochrome mode so nothing looks blue/navy */
+[data-color-theme="monochrome"] .bg-sky-500\/5,
+[data-color-theme="monochrome"] .bg-sky-500\/10,
+[data-color-theme="monochrome"] .bg-indigo-500\/10,
+[data-color-theme="monochrome"] .bg-emerald-500\/5,
+[data-color-theme="monochrome"] .bg-amber-500\/5 {
+  background-color: rgba(113, 113, 122, 0.1) !important;
+  border-color: rgba(113, 113, 122, 0.28) !important;
 }
 
 /* Frosted Glassmorphic Bank Card Surface */

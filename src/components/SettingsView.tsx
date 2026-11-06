@@ -35,7 +35,7 @@ interface SettingsViewProps {
   users: UserAccount[];
   activeUserId: string;
   onSwitchUser: (userId: string) => void;
-  onCreateUser: (name: string) => void;
+  onCreateUser: (name: string, initialPin?: string) => void;
   onDeleteUser?: (userId: string) => void;
   onUpdateSettings: (partial: Partial<AppState['settings']>) => void;
   onUpdateBudget: (categoryId: string, monthlyLimit: number) => void;
@@ -109,6 +109,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // New User Creation state (Only accessible to Hootan)
   const [newUserName, setNewUserName] = useState('');
+  const [newUserPin, setNewUserPin] = useState('');
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [confirmClearData, setConfirmClearData] = useState(false);
 
@@ -444,9 +445,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (!newUserName.trim()) return;
-                  onCreateUser(newUserName.trim());
+                  const cleanPin = toEnglishDigits(newUserPin).replace(/\D/g, '').slice(0, 4);
+                  if (!newUserName.trim() || cleanPin.length !== 4) return;
+                  onCreateUser(newUserName.trim(), cleanPin);
                   setNewUserName('');
+                  setNewUserPin('');
                   setIsAddingUser(false);
                 }}
                 className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
@@ -458,87 +461,135 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   placeholder="نام کاربر جدید (مثلاً: علی، سارا...)"
                   className="flex-1 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
                 />
+                <input
+                  type="text"
+                  dir="ltr"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={newUserPin}
+                  onChange={(e) =>
+                    setNewUserPin(toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4))
+                  }
+                  placeholder="رمز ۴ رقمی کاربر جدید"
+                  className="w-full sm:w-44 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-center tabular-nums text-slate-900 dark:text-white"
+                />
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                  disabled={!newUserName.trim() || newUserPin.length !== 4}
+                  className="px-5 py-2.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50"
                 >
                   <Check size={14} strokeWidth={2.5} />
-                  <span>ساخت حساب کاربری مستقل</span>
+                  <span>ساخت حساب با رمز ۴ رقمی</span>
                 </button>
               </form>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {users.map((u) => {
-                const isCurrent = u.id === activeUserId;
-                const isUserAdmin = u.id === 'hootan';
-                return (
-                  <div
-                    key={u.id}
-                    onClick={() => {
-                      if (!isCurrent) onSwitchUser(u.id);
-                    }}
-                    className={`p-4 rounded-2xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
-                      isCurrent
-                        ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500'
-                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-slate-50/50 dark:bg-slate-800/30'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-sm shrink-0 shadow-xs"
-                        style={{ backgroundColor: u.avatarColor || '#10b981' }}
-                      >
-                        {u.name.slice(0, 1)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
-                            {u.name}
-                          </span>
-                          {isUserAdmin && (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                              <ShieldCheck size={12} />
-                              <span>مدیر</span>
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                          {isCurrent ? (
-                            <>
-                              <Check size={12} className="text-emerald-500" />
-                              <span>حساب فعال فعلی</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>ورود به این حساب</span>
-                              <ArrowLeft size={11} />
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {isAdminHootan &&
-                      !isCurrent &&
-                      onDeleteUser &&
-                      u.id !== 'hootan' &&
-                      u.id !== 'fatemeh' && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteUser(u.id);
-                          }}
-                          className="text-xs text-rose-500 hover:underline font-bold px-2 py-1 cursor-pointer"
+            {isAdminHootan ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {users.map((u) => {
+                  const isCurrent = u.id === activeUserId;
+                  const isUserAdmin = u.id === 'hootan';
+                  return (
+                    <div
+                      key={u.id}
+                      onClick={() => {
+                        if (!isCurrent) onSwitchUser(u.id);
+                      }}
+                      className={`p-4 rounded-2xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-slate-50/50 dark:bg-slate-800/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-sm shrink-0 shadow-xs"
+                          style={{ backgroundColor: u.avatarColor || '#10b981' }}
                         >
-                          حذف
-                        </button>
-                      )}
+                          {u.name.slice(0, 1)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                              {u.name}
+                            </span>
+                            {isUserAdmin && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                <ShieldCheck size={12} />
+                                <span>مدیر</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                            {isCurrent ? (
+                              <>
+                                <Check size={12} className="text-emerald-500" />
+                                <span>حساب فعال فعلی</span>
+                              </>
+                            ) : (
+                              <>
+                                <Lock size={11} />
+                                <span>ورود با رمز اختصاصی</span>
+                                <ArrowLeft size={11} />
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {!isCurrent &&
+                        onDeleteUser &&
+                        u.id !== 'hootan' &&
+                        u.id !== 'fatemeh' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteUser(u.id);
+                            }}
+                            className="text-xs text-rose-500 hover:underline font-bold px-2 py-1 cursor-pointer"
+                          >
+                            حذف
+                          </button>
+                        )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-sm shrink-0 shadow-xs"
+                    style={{
+                      backgroundColor:
+                        users.find((u) => u.id === activeUserId)?.avatarColor || '#f43f5e',
+                    }}
+                  >
+                    {userName.slice(0, 1)}
                   </div>
-                );
-              })}
-            </div>
+                  <div>
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white block">
+                      شما با حساب شخصی «{userName}» وارد شده‌اید
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      حساب سایر کاربران قفل است و ورود به آن‌ها فقط با رمز ۴ رقمی همان کاربر امکان‌پذیر است.
+                    </span>
+                  </div>
+                </div>
+
+                {onLockAppNow && (
+                  <button
+                    type="button"
+                    onClick={onLockAppNow}
+                    className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+                  >
+                    <Lock size={13} strokeWidth={2.4} />
+                    <span>خروج / ورود به حساب دیگر با رمز</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -706,7 +757,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                    رمز ۴ رقمی ورود به حساب {userName}
+                    رمز ۴ رقمی اختصاصی ورود به حساب {userName} (الزامی برای امنیت حساب)
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -714,7 +765,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       dir="ltr"
                       inputMode="numeric"
                       maxLength={4}
-                      placeholder="مثلاً: 1375 (خالی = بدون رمز)"
+                      placeholder="یک رمز ۴ رقمی وارد کنید (مثلاً: 1375)"
                       value={pinDraft}
                       onChange={(e) =>
                         setPinDraft(
@@ -723,20 +774,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       }
                       className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-sans tabular-nums font-bold text-center text-slate-900 dark:text-white"
                     />
-                    {settings.pinCode && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPinDraft('');
-                          onUpdateSettings({ pinCode: '' });
-                          setPinSavedToast(`قفل رمز ۴ رقمی برای حساب ${userName} حذف شد.`);
-                          setTimeout(() => setPinSavedToast(''), 3500);
-                        }}
-                        className="px-3 py-2.5 rounded-xl bg-rose-500/10 text-rose-500 text-xs font-extrabold cursor-pointer shrink-0"
-                      >
-                        حذف رمز
-                      </button>
-                    )}
                   </div>
                 </div>
 
@@ -747,35 +784,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       const cleanPin = toEnglishDigits(pinDraft)
                         .replace(/\D/g, '')
                         .slice(0, 4);
-                      if (cleanPin.length > 0 && cleanPin.length < 4) {
-                        setPinSavedToast('رمز ورود باید دقیقاً ۴ رقم باشد.');
+                      if (cleanPin.length !== 4) {
+                        setPinSavedToast('برای امنیت حساب، رمز ورود باید دقیقاً ۴ رقم باشد.');
                         setTimeout(() => setPinSavedToast(''), 3500);
                         return;
                       }
                       onUpdateSettings({ pinCode: cleanPin });
                       setPinSavedToast(
-                        cleanPin
-                          ? `رمز ۴ رقمی (${toPersianDigits(
-                              cleanPin
-                            )}) برای حساب ${userName} ذخیره شد`
-                          : `تنظیمات بدون رمز برای حساب ${userName} ذخیره شد`
+                        `رمز ۴ رقمی (${toPersianDigits(
+                          cleanPin
+                        )}) برای حساب ${userName} ذخیره و فعال شد`
                       );
                       setTimeout(() => setPinSavedToast(''), 4000);
                     }}
                     className="flex-1 py-2.5 px-4 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
                   >
                     <Check size={14} strokeWidth={2.5} />
-                    <span>ذخیره رمز و تنظیمات حساب</span>
+                    <span>ذخیره رمز ۴ رقمی حساب</span>
                   </button>
 
-                  {settings.pinCode && onLockAppNow && (
+                  {onLockAppNow && (
                     <button
                       type="button"
                       onClick={onLockAppNow}
                       className="py-2.5 px-3.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
                     >
                       <Lock size={13} strokeWidth={2.4} />
-                      <span>قفل کردن حساب الان</span>
+                      <span>قفل کردن حساب / تعویض کاربر</span>
                     </button>
                   )}
                 </div>

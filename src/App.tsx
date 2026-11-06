@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, ChevronDown, Check, Plus, ShieldCheck } from 'lucide-react';
+import { User, ChevronDown, Check, Plus, ShieldCheck, Lock, X } from 'lucide-react';
 import {
   AppState,
   Transaction,
@@ -106,6 +107,7 @@ function loadIsolatedUserState(user: UserAccount): AppState {
           ...baseClean.settings,
           ...(parsed.settings || {}),
           userName: parsed.settings?.userName || user.name,
+          pinCode: parsed.settings?.pinCode || user.pinCode || '',
           githubSync: {
             ...baseClean.settings.githubSync!,
             ...existingSync,
@@ -133,7 +135,7 @@ function loadIsolatedUserState(user: UserAccount): AppState {
     // ignore
   }
 
-  return createCleanUserState(
+  const fresh = createCleanUserState(
     user.id,
     user.name,
     user.id === 'fatemeh' ? 'rose' : 'emerald',
@@ -141,6 +143,10 @@ function loadIsolatedUserState(user: UserAccount): AppState {
     magicLinkConfig?.repoName || autoRepo.repoName || '',
     magicLinkConfig?.token || recoveredOldToken || ''
   );
+  if (user.pinCode) {
+    fresh.settings.pinCode = user.pinCode;
+  }
+  return fresh;
 }
 
 /**
@@ -204,6 +210,8 @@ export default function App() {
 
   const [isUserSwitcherOpen, setIsUserSwitcherOpen] = useState(false);
   const [quickNewUserName, setQuickNewUserName] = useState('');
+  const [quickNewUserPin, setQuickNewUserPin] = useState('');
+  const [userCreatedToast, setUserCreatedToast] = useState('');
 
   const [activeTabIndex, setActiveTabIndex] = useState<number>(0);
   const [swipeDirection, setSwipeDirection] = useState<number>(0);
@@ -214,10 +222,21 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [syncErrorMessage, setSyncErrorMessage] = useState<string>('');
 
-  // Per-User PIN Lock State
-  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => !state.settings.pinCode);
+  // Per-User PIN Lock State (Unlocked within current session once verified)
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(true);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<boolean>(false);
+
+  // Mandatory First-Time PIN Setup State (if current account has no PIN yet)
+  const [firstTimePinDraft, setFirstTimePinDraft] = useState<string>('');
+  const [firstTimePinError, setFirstTimePinError] = useState<string>('');
+
+  // Pre-Switch Account Verification Modal State (Requires target user's 4-digit PIN BEFORE switching!)
+  const [switchTargetUserId, setSwitchTargetUserId] = useState<string | null>(null);
+  const [switchPinInput, setSwitchPinInput] = useState<string>('');
+  const [switchPinError, setSwitchPinError] = useState<string>('');
+  const [isCheckingRemotePin, setIsCheckingRemotePin] = useState<boolean>(false);
+  const [remoteTargetPin, setRemoteTargetPin] = useState<string | null>(null);
 
   // Touch Swipe Refs
   const touchStartX = useRef<number | null>(null);
@@ -226,6 +245,19 @@ export default function App() {
   const hasUserEditedRef = useRef<boolean>(false);
 
   const isAdminHootan = activeUserId === 'hootan';
+
+  // Keep user registry pinCode synced with active user's settings.pinCode
+  useEffect(() => {
+    if (state.settings.pinCode) {
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === activeUserId && u.pinCode !== state.settings.pinCode
+            ? { ...u, pinCode: state.settings.pinCode }
+            : u
+        )
+      );
+    }
+  }, [state.settings.pinCode, activeUserId]);
 
   // Save users registry & activeUserId
   useEffect(() => {
@@ -256,53 +288,154 @@ export default function App() {
     }
   }, [state, activeUserId]);
 
-  // Switch between isolated user accounts
-  const handleSwitchUser = (targetUserId: string) => {
+  // Helper to resolve a user's stored PIN from registry or localStorage
+  const getStoredUserPin = useCallback(
+    (userId: string): string => {
+      const regUser = users.find((u) => u.id === userId);
+      if (regUser?.pinCode) return regUser.pinCode;
+      try {
+        const raw = localStorage.getItem(getUserStorageKey(userId));
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.settings?.pinCode) return parsed.settings.pinCode;
+        }
+      } catch {
+        // ignore
+      }
+      return '';
+    },
+    [users]
+  );
+
+  // Request switching to another user account — ALWAYS opens the PIN verification modal first!
+  const handleRequestSwitchUser = useCallback(
+    async (targetUserId: string) => {
+      if (targetUserId === activeUserId && isUnlocked) {
+        setIsUserSwitcherOpen(false);
+        return;
+      }
+      const targetUser = users.find((u) => u.id === targetUserId);
+      if (!targetUser) return;
+
+      setSwitchTargetUserId(targetUserId);
+      setSwitchPinInput('');
+      setSwitchPinError('');
+      setRemoteTargetPin(null);
+      setIsUserSwitcherOpen(false);
+
+      // Also check remote GitHub file for the target user so their latest PIN set on their own phone is enforced!
+      setIsCheckingRemotePin(true);
+      try {
+        const targetLocalState = loadIsolatedUserState(targetUser);
+        const queryState: AppState = {
+          ...targetLocalState,
+          settings: {
+            ...targetLocalState.settings,
+            githubSync: {
+              ...targetLocalState.settings.githubSync!,
+              repoOwner:
+                state.settings.githubSync?.repoOwner ||
+                targetLocalState.settings.githubSync?.repoOwner ||
+                detectGitHubPagesRepo().repoOwner,
+              repoName:
+                state.settings.githubSync?.repoName ||
+                targetLocalState.settings.githubSync?.repoName ||
+                detectGitHubPagesRepo().repoName,
+              token:
+                state.settings.githubSync?.token ||
+                targetLocalState.settings.githubSync?.token ||
+                '',
+              filePath: `data/users/${targetUser.id}-db.json`,
+            },
+          },
+        };
+        const ghPull = await pullStateFromGitHubDirect(queryState);
+        if (ghPull.ok && ghPull.remoteState?.settings?.pinCode) {
+          const rPin = ghPull.remoteState.settings.pinCode;
+          setRemoteTargetPin(rPin);
+          setUsers((prev) =>
+            prev.map((u) => (u.id === targetUser.id ? { ...u, pinCode: rPin } : u))
+          );
+          // Cache remote state for target user in localStorage
+          localStorage.setItem(
+            getUserStorageKey(targetUser.id),
+            JSON.stringify({
+              ...targetLocalState,
+              ...ghPull.remoteState,
+              userId: targetUser.id,
+            })
+          );
+        }
+      } catch {
+        // Offline fallback uses local PIN
+      } finally {
+        setIsCheckingRemotePin(false);
+      }
+    },
+    [activeUserId, isUnlocked, users, state.settings.githubSync]
+  );
+
+  // Finalize switching user ONLY after PIN is verified
+  const executeVerifiedSwitchUser = (targetUserId: string, newPinIfFirstTime?: string) => {
     const targetUser = users.find((u) => u.id === targetUserId);
     if (!targetUser) return;
 
-    hasUserEditedRef.current = false;
+    hasUserEditedRef.current = Boolean(newPinIfFirstTime);
     const loadedState = loadIsolatedUserState(targetUser);
+    if (newPinIfFirstTime) {
+      loadedState.settings.pinCode = newPinIfFirstTime;
+      loadedState.updatedAt = Date.now();
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === targetUser.id ? { ...u, pinCode: newPinIfFirstTime } : u
+        )
+      );
+    }
+
     setActiveUserId(targetUser.id);
     setState(loadedState);
     setPinInput('');
     setPinError(false);
-    setIsUnlocked(!loadedState.settings.pinCode);
+    setIsUnlocked(true);
+    setSwitchTargetUserId(null);
+    setSwitchPinInput('');
+    setSwitchPinError('');
     setIsUserSwitcherOpen(false);
   };
 
-  // Create a brand new isolated user account (Restricted to Hootan - primary admin)
-  const handleCreateUser = (name: string) => {
+  // Create a brand new isolated user account (Restricted strictly to Hootan - primary admin)
+  const handleCreateUser = (name: string, initialPin?: string) => {
     if (activeUserId !== 'hootan') return;
     const cleanName = name.trim();
-    if (!cleanName) return;
+    const cleanPin = toEnglishDigits(initialPin || '').replace(/\D/g, '').slice(0, 4);
+    if (!cleanName || cleanPin.length !== 4) return;
+
     const newId = `user_${Date.now()}`;
     const newUser: UserAccount = {
       id: newId,
       name: cleanName,
       avatarColor: AVATAR_PALETTE[users.length % AVATAR_PALETTE.length],
       createdAt: Date.now(),
+      pinCode: cleanPin,
     };
     const updatedUsers = [...users, newUser];
     setUsers(updatedUsers);
 
     const freshState = loadIsolatedUserState(newUser);
+    freshState.settings.pinCode = cleanPin;
     localStorage.setItem(getUserStorageKey(newId), JSON.stringify(freshState));
-    setActiveUserId(newId);
-    setState(freshState);
-    setIsUnlocked(true);
-    setIsUserSwitcherOpen(false);
+
+    // Keep Hootan in his own admin account and show a confirmation toast
+    setUserCreatedToast(`حساب مستقل «${cleanName}» با رمز ۴ رقمی ساخته شد.`);
+    setTimeout(() => setUserCreatedToast(''), 4000);
   };
 
   const handleDeleteUser = (userIdToDelete: string) => {
     if (activeUserId !== 'hootan') return;
-    if (users.length <= 1) return;
+    if (users.length <= 1 || userIdToDelete === 'hootan') return;
     const remaining = users.filter((u) => u.id !== userIdToDelete);
     setUsers(remaining);
     localStorage.removeItem(getUserStorageKey(userIdToDelete));
-    if (activeUserId === userIdToDelete) {
-      handleSwitchUser(remaining[0].id);
-    }
   };
 
   // Push current user's state to their isolated GitHub file: data/users/${activeUserId}-db.json
@@ -381,6 +514,7 @@ export default function App() {
               settings: {
                 ...prev.settings,
                 ...(remoteData.settings || {}),
+                pinCode: remoteData.settings?.pinCode || prev.settings.pinCode || '',
                 githubSync: {
                   ...prev.settings.githubSync!,
                   ...(remoteData.settings?.githubSync || {}),
@@ -404,6 +538,31 @@ export default function App() {
           return prev;
         });
         setSyncStatus('synced');
+      } else if (!state.settings.githubSync?.token?.trim()) {
+        // Fallback: check legacy data/hamhesab-db.json once to recover syncVault token if needed
+        const legacyQuery: AppState = {
+          ...state,
+          settings: {
+            ...state.settings,
+            githubSync: {
+              ...state.settings.githubSync!,
+              filePath: 'data/hamhesab-db.json',
+            },
+          },
+        };
+        const legacyPull = await pullStateFromGitHubDirect(legacyQuery);
+        if (legacyPull.ok && legacyPull.recoveredToken) {
+          setState((prev) => ({
+            ...prev,
+            settings: {
+              ...prev.settings,
+              githubSync: {
+                ...prev.settings.githubSync!,
+                token: prev.settings.githubSync?.token || legacyPull.recoveredToken || '',
+              },
+            },
+          }));
+        }
       }
     } catch {
       // Offline mode continues using LocalStorage seamlessly
@@ -472,18 +631,27 @@ export default function App() {
     return () => window.removeEventListener('focus', handleFocus);
   }, [state.settings.autoCheckClipboardSms, state.importedSmsHashes, state.transactions]);
 
-  // Sync Dark Mode & Color Theme from the active user's settings
+  // Sync Dark Mode, Color Theme & Mobile Status Bar Theme-Color
   useEffect(() => {
     const root = document.documentElement;
     const mode =
       state.settings.themeMode || (state.settings.darkMode ? 'dark' : 'light');
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const isMono = state.settings.colorTheme === 'monochrome';
 
     const applyDarkClass = (isDark: boolean) => {
       if (isDark) {
         root.classList.add('dark');
       } else {
         root.classList.remove('dark');
+      }
+      const metaTheme = document.querySelector('meta[name="theme-color"]');
+      if (metaTheme) {
+        if (isMono) {
+          metaTheme.setAttribute('content', isDark ? '#09090b' : '#fafafa');
+        } else {
+          metaTheme.setAttribute('content', isDark ? '#0f172a' : '#f8fafc');
+        }
       }
     };
 
@@ -718,6 +886,13 @@ export default function App() {
         )
       );
     }
+    if (partial.pinCode !== undefined) {
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === activeUserId ? { ...u, pinCode: partial.pinCode } : u
+        )
+      );
+    }
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
@@ -858,6 +1033,7 @@ export default function App() {
   const handleClearCurrentUserData = () => {
     hasUserEditedRef.current = true;
     const autoRepo = detectGitHubPagesRepo();
+    const existingPin = state.settings.pinCode || activeUserObj.pinCode || '';
     const cleanState = createCleanUserState(
       activeUserId,
       state.settings.userName || activeUserObj.name,
@@ -866,6 +1042,7 @@ export default function App() {
       state.settings.githubSync?.repoName || autoRepo.repoName,
       state.settings.githubSync?.token || ''
     );
+    cleanState.settings.pinCode = existingPin;
     setState({
       ...cleanState,
       updatedAt: Date.now(),
@@ -878,9 +1055,19 @@ export default function App() {
   };
 
   const currentUserName = state.settings.userName || activeUserObj.name || 'کاربر';
+  const currentAccountPin = state.settings.pinCode || activeUserObj.pinCode || '';
+  const needsFirstTimePinSetup = !currentAccountPin;
 
-  // Per-User PIN Lock Screen (Prevents unauthorized access to this user's account)
-  if (!isUnlocked && state.settings.pinCode) {
+  // Target user for the Pre-Switch Password Verification Modal
+  const switchTargetUserObj = switchTargetUserId
+    ? users.find((u) => u.id === switchTargetUserId) || null
+    : null;
+  const effectiveTargetPin = switchTargetUserId
+    ? remoteTargetPin || getStoredUserPin(switchTargetUserId)
+    : '';
+
+  // Per-User PIN Lock Screen (When user locks their account or opens a locked session)
+  if (!isUnlocked && currentAccountPin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-4">
         <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 text-center space-y-5 shadow-2xl">
@@ -892,7 +1079,7 @@ export default function App() {
               ورود به حساب شخصی «{currentUserName}»
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              لطفاً رمز ۴ رقمی اختصاصی این حساب را وارد کنید
+              لطفاً رمز ۴ رقمی اختصاصی حساب «{currentUserName}» را وارد کنید
             </p>
           </div>
           <input
@@ -905,7 +1092,7 @@ export default function App() {
               const val = toEnglishDigits(e.target.value).replace(/\D/g, '');
               setPinInput(val);
               setPinError(false);
-              if (val === state.settings.pinCode) {
+              if (val === currentAccountPin) {
                 setIsUnlocked(true);
               } else if (val.length === 4) {
                 setPinError(true);
@@ -915,13 +1102,15 @@ export default function App() {
             className="w-40 mx-auto block px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums"
           />
           {pinError && (
-            <p className="text-xs text-rose-400 font-bold">رمز وارد شده اشتباه است</p>
+            <p className="text-xs text-rose-400 font-bold">
+              رمز وارد شده اشتباه است. دسترسی مجاز نیست.
+            </p>
           )}
 
-          {/* Option to switch to another user account from the lock screen */}
+          {/* Switch to another user account (Still requires that user's PIN!) */}
           <div className="pt-3 border-t border-slate-800">
             <span className="text-[11px] text-slate-400 block mb-2">
-              تعویض به حساب کاربری دیگر:
+              ورود به حساب کاربری دیگر (نیازمند رمز اختصاصی آن حساب):
             </span>
             <div className="flex flex-wrap items-center justify-center gap-2">
               {users
@@ -930,16 +1119,92 @@ export default function App() {
                   <button
                     key={u.id}
                     type="button"
-                    onClick={() => handleSwitchUser(u.id)}
+                    onClick={() => handleRequestSwitchUser(u.id)}
                     className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 cursor-pointer flex items-center gap-1.5"
                   >
-                    <User size={13} />
-                    <span>ورود به حساب {u.name}</span>
+                    <Lock size={12} />
+                    <span>حساب {u.name}</span>
                   </button>
                 ))}
             </div>
           </div>
         </div>
+
+        {/* Render Pre-Switch Verification Modal even on Lock Screen if triggered */}
+        {switchTargetUserObj &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
+              <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center space-y-4 shadow-2xl">
+                <div className="flex justify-center">
+                  <CircularIcon name="lock" size="lg" color="#10b981" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                    ورود به حساب «{switchTargetUserObj.name}»
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    {isCheckingRemotePin
+                      ? 'در حال بررسی وضعیت امنیتی حساب...'
+                      : effectiveTargetPin
+                      ? `برای ورود به حساب «${switchTargetUserObj.name}»، رمز ۴ رقمی اختصاصی این حساب را وارد کنید:`
+                      : `برای ورود و فعال‌سازی امنیت حساب «${switchTargetUserObj.name}»، یک رمز ۴ رقمی برای آن تعیین کنید:`}
+                  </p>
+                </div>
+
+                <input
+                  type="password"
+                  dir="ltr"
+                  maxLength={4}
+                  inputMode="numeric"
+                  disabled={isCheckingRemotePin}
+                  value={switchPinInput}
+                  onChange={(e) => {
+                    const val = toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4);
+                    setSwitchPinInput(val);
+                    setSwitchPinError('');
+                    if (effectiveTargetPin && val.length === 4) {
+                      if (val === effectiveTargetPin) {
+                        executeVerifiedSwitchUser(switchTargetUserObj.id);
+                      } else {
+                        setSwitchPinError('رمز وارد شده اشتباه است! شما اجازه ورود به این حساب را ندارید.');
+                      }
+                    }
+                  }}
+                  placeholder="••••"
+                  className="w-40 mx-auto block px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums text-slate-900 dark:text-white"
+                />
+
+                {switchPinError && (
+                  <p className="text-xs text-rose-500 font-bold">{switchPinError}</p>
+                )}
+
+                {!effectiveTargetPin && !isCheckingRemotePin && (
+                  <button
+                    type="button"
+                    disabled={switchPinInput.length !== 4}
+                    onClick={() => {
+                      if (switchPinInput.length === 4) {
+                        executeVerifiedSwitchUser(switchTargetUserObj.id, switchPinInput);
+                      }
+                    }}
+                    className="w-full py-2.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer disabled:opacity-50"
+                  >
+                    ثبت رمز ۴ رقمی و ورود به حساب
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setSwitchTargetUserId(null)}
+                  className="w-full py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  انصراف
+                </button>
+              </div>
+            </div>,
+            document.body
+          )}
       </div>
     );
   }
@@ -970,7 +1235,7 @@ export default function App() {
               type="button"
               onClick={() => setIsUserSwitcherOpen((prev) => !prev)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 text-xs font-extrabold text-slate-800 dark:text-slate-100 cursor-pointer transition-all"
-              title="تعویض حساب کاربری"
+              title="مدیریت و امنیت حساب کاربری"
             >
               <span
                 className="w-5 h-5 rounded-full text-white text-[10px] font-black flex items-center justify-center shrink-0"
@@ -979,6 +1244,7 @@ export default function App() {
                 {currentUserName.slice(0, 1)}
               </span>
               <span>حسابِ {currentUserName}</span>
+              <Lock size={11} className="text-emerald-500" />
               <ChevronDown size={13} className="text-slate-400" />
             </button>
           </div>
@@ -1022,7 +1288,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Quick User Account Switcher Dropdown Bar */}
+        {/* Quick User Account Switcher Dropdown Bar (Strict Password-Protected) */}
         {isUserSwitcherOpen && (
           <div
             data-no-swipe="true"
@@ -1033,7 +1299,7 @@ export default function App() {
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  انتخاب حساب کاربری (کاملاً مجزا):
+                  ورود به حساب دیگر (نیازمند رمز ۴ رقمی آن حساب):
                 </span>
                 {users.map((u) => {
                   const isCurrent = u.id === activeUserId;
@@ -1041,14 +1307,18 @@ export default function App() {
                     <button
                       key={u.id}
                       type="button"
-                      onClick={() => handleSwitchUser(u.id)}
+                      onClick={() => handleRequestSwitchUser(u.id)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
                         isCurrent
                           ? 'theme-bg text-white shadow-xs'
                           : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
                       }`}
                     >
-                      <User size={13} strokeWidth={2.3} />
+                      {isCurrent ? (
+                        <User size={13} strokeWidth={2.3} />
+                      ) : (
+                        <Lock size={12} strokeWidth={2.3} />
+                      )}
                       <span>{u.name}</span>
                       {u.id === 'hootan' && (
                         <ShieldCheck size={12} className="opacity-80" />
@@ -1057,28 +1327,59 @@ export default function App() {
                     </button>
                   );
                 })}
+
+                {currentAccountPin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUnlocked(false);
+                      setIsUserSwitcherOpen(false);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-extrabold cursor-pointer flex items-center gap-1"
+                  >
+                    <Lock size={12} />
+                    <span>قفل کردن حساب فعلی</span>
+                  </button>
+                )}
               </div>
 
               {isAdminHootan ? (
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (!quickNewUserName.trim()) return;
-                    handleCreateUser(quickNewUserName.trim());
+                    const cleanPin = toEnglishDigits(quickNewUserPin).replace(/\D/g, '').slice(0, 4);
+                    if (!quickNewUserName.trim() || cleanPin.length !== 4) return;
+                    handleCreateUser(quickNewUserName.trim(), cleanPin);
                     setQuickNewUserName('');
+                    setQuickNewUserPin('');
                   }}
-                  className="flex items-center gap-1.5"
+                  className="flex flex-wrap items-center gap-1.5"
                 >
                   <input
                     type="text"
                     value={quickNewUserName}
                     onChange={(e) => setQuickNewUserName(e.target.value)}
                     placeholder="نام کاربر جدید..."
-                    className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white w-36"
+                    className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white w-32"
+                  />
+                  <input
+                    type="text"
+                    dir="ltr"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={quickNewUserPin}
+                    onChange={(e) =>
+                      setQuickNewUserPin(
+                        toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4)
+                      )
+                    }
+                    placeholder="رمز ۴ رقمی"
+                    className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-center tabular-nums text-slate-900 dark:text-white w-24"
                   />
                   <button
                     type="submit"
-                    className="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer whitespace-nowrap flex items-center gap-1"
+                    disabled={!quickNewUserName.trim() || quickNewUserPin.length !== 4}
+                    className="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-50"
                   >
                     <Plus size={13} strokeWidth={2.5} />
                     <span>کاربر جدید</span>
@@ -1087,10 +1388,18 @@ export default function App() {
               ) : (
                 <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
                   <ShieldCheck size={13} className="text-emerald-500" />
-                  <span>افزودن کاربر جدید ویژه مدیر اصلی (هوتن)</span>
+                  <span>حساب سایر کاربران با رمز ۴ رقمی محافظت می‌شود</span>
                 </span>
               )}
             </div>
+
+            {userCreatedToast && (
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold text-center">
+                  {userCreatedToast}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </header>
@@ -1162,7 +1471,7 @@ export default function App() {
                 state={state}
                 users={users}
                 activeUserId={activeUserId}
-                onSwitchUser={handleSwitchUser}
+                onSwitchUser={handleRequestSwitchUser}
                 onCreateUser={handleCreateUser}
                 onDeleteUser={handleDeleteUser}
                 onUpdateSettings={handleUpdateSettings}
@@ -1222,6 +1531,157 @@ export default function App() {
           })}
         </nav>
       </div>
+
+      {/* Mandatory First-Time PIN Setup Modal (Ensures Hootan & every user sets a 4-digit PIN immediately) */}
+      {needsFirstTimePinSetup &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
+            <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center space-y-4 shadow-2xl">
+              <div className="flex justify-center">
+                <CircularIcon name="shield" size="lg" color="#10b981" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                  تعیین رمز ۴ رقمی اختصاصی حساب «{currentUserName}»
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                  برای اینکه هیچ کاربر دیگری نتواند بدون اجازه وارد اکانت شخصی شما شود، یک رمز ۴ رقمی برای حساب «{currentUserName}» انتخاب کنید:
+                </p>
+              </div>
+
+              <input
+                type="text"
+                dir="ltr"
+                maxLength={4}
+                inputMode="numeric"
+                value={firstTimePinDraft}
+                onChange={(e) => {
+                  setFirstTimePinDraft(
+                    toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4)
+                  );
+                  setFirstTimePinError('');
+                }}
+                placeholder="مثلاً: 1370"
+                className="w-44 mx-auto block px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center text-xl tracking-widest font-sans tabular-nums font-bold text-slate-900 dark:text-white"
+              />
+
+              {firstTimePinError && (
+                <p className="text-xs text-rose-500 font-bold">{firstTimePinError}</p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  const clean = toEnglishDigits(firstTimePinDraft)
+                    .replace(/\D/g, '')
+                    .slice(0, 4);
+                  if (clean.length !== 4) {
+                    setFirstTimePinError('رمز ورود باید دقیقاً ۴ رقم باشد.');
+                    return;
+                  }
+                  handleUpdateSettings({ pinCode: clean });
+                  setFirstTimePinDraft('');
+                }}
+                className="w-full py-3 rounded-2xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Check size={15} strokeWidth={2.5} />
+                <span>ثبت رمز ۴ رقمی و قفل‌گذاری حساب</span>
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Pre-Switch User Password Verification Modal (Blocks unauthorized switching into Hootan or any other account) */}
+      {switchTargetUserObj &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
+            <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center space-y-4 shadow-2xl">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400">تأیید هویت کاربر</span>
+                <button
+                  type="button"
+                  onClick={() => setSwitchTargetUserId(null)}
+                  className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-pointer"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="flex justify-center">
+                <CircularIcon name="lock" size="lg" color="#10b981" />
+              </div>
+
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                  ورود به حساب «{switchTargetUserObj.name}»
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  {isCheckingRemotePin
+                    ? 'در حال بررسی رمز امنیتی حساب...'
+                    : effectiveTargetPin
+                    ? `برای ورود به حساب «${switchTargetUserObj.name}»، رمز ۴ رقمی اختصاصی این کاربر را وارد کنید:`
+                    : `برای اولین ورود به حساب «${switchTargetUserObj.name}»، یک رمز ۴ رقمی اختصاصی برای آن تعیین کنید:`}
+                </p>
+              </div>
+
+              <input
+                type="password"
+                dir="ltr"
+                maxLength={4}
+                inputMode="numeric"
+                disabled={isCheckingRemotePin}
+                value={switchPinInput}
+                onChange={(e) => {
+                  const val = toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4);
+                  setSwitchPinInput(val);
+                  setSwitchPinError('');
+                  if (effectiveTargetPin && val.length === 4) {
+                    if (val === effectiveTargetPin) {
+                      executeVerifiedSwitchUser(switchTargetUserObj.id);
+                    } else {
+                      setSwitchPinError(
+                        `رمز وارد شده اشتباه است! بدون رمز «${switchTargetUserObj.name}» امکان ورود وجود ندارد.`
+                      );
+                    }
+                  }
+                }}
+                placeholder="••••"
+                className="w-40 mx-auto block px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums text-slate-900 dark:text-white"
+              />
+
+              {switchPinError && (
+                <p className="text-xs text-rose-500 font-bold">{switchPinError}</p>
+              )}
+
+              {!effectiveTargetPin && !isCheckingRemotePin && (
+                <button
+                  type="button"
+                  disabled={switchPinInput.length !== 4}
+                  onClick={() => {
+                    if (switchPinInput.length === 4) {
+                      executeVerifiedSwitchUser(switchTargetUserObj.id, switchPinInput);
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer disabled:opacity-50"
+                >
+                  ثبت رمز ۴ رقمی و ورود به حساب
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setSwitchTargetUserId(null)}
+                className="w-full py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+              >
+                انصراف و ماندن در حساب «{currentUserName}»
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* Add / Edit Transaction Modal & Bank SMS Reader Modal */}
       <div>
