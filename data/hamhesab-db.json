@@ -5,14 +5,14 @@
       "amount": 61000,
       "type": "expense",
       "categoryId": "cat_transport",
-      "subCategoryId": "sub_fuel",
+      "subCategoryId": "sub_taxi",
       "tags": [],
       "spentBy": "hootan",
       "recordedBy": "hootan",
       "cardId": "card_1793901419232",
       "jalaliDate": "1405/08/15",
       "time": "11:25",
-      "note": "بانك رفاه حساب 386121254 برداشت610,000- خريد اينترنتي از به پرداخت ملت 2 ش·پ533057 مانده103,570,443 5/08/15-11:25",
+      "note": "بانك رفاه حساب 386121254 برداشت610,000- خريد اينترنتي از به پرداخت ملت 2 ش·پ533057 مانده103,570,443 5/08/15-11:25\n\nکرایه اسنپ مامان",
       "smsHash": "sms_f68d3337",
       "id": "tx_1793969923455_0",
       "createdAt": 1793969923455
@@ -485,7 +485,7 @@
     "sms_996e970c",
     "sms_f68d3337"
   ],
-  "updatedAt": 1793969923456,
+  "updatedAt": 1793969956555,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
@@ -503,7 +503,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793969939621
+      "lastSyncedAt": 1793969957363
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
