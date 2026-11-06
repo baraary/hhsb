@@ -301,7 +301,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793986980789,
+  "updatedAt": 1793986982310,
   "settings": {
     "userName": "هوتن",
     "hootanName": "هوتن",
@@ -320,7 +320,7 @@
       "branch": "main",
       "filePath": "data/users/hootan-db.json",
       "token": "",
-      "lastSyncedAt": 1793986981898
+      "lastSyncedAt": 1793986982824
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f",
@@ -340,11 +340,11 @@
       "pinCode": "0611"
     },
     {
-      "id": "user_1793986955696",
+      "id": "user_1793986944850",
       "name": "فهیمه",
-      "avatarColor": "#8b5cf6",
-      "createdAt": 1793986955696,
-      "pinCode": "1320"
+      "avatarColor": "#0ea5e9",
+      "createdAt": 1793986944850,
+      "pinCode": "7077"
     }
   ]
 }
