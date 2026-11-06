@@ -6,6 +6,7 @@
       "title": "رفاه",
       "bankId": "refah",
       "cardNumber": "5894631223028499",
+      "shebaNumber": "IR320130100000000386121254",
       "initialBalance": 8809594,
       "expiryDate": "۰۸/۰۴",
       "cardColorTheme": "auto",
@@ -317,7 +318,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793993421569,
+  "updatedAt": 1793993439450,
   "settings": {
     "userName": "هوتن",
     "hootanName": "هوتن",
@@ -336,7 +337,7 @@
       "branch": "main",
       "filePath": "data/users/hootan-db.json",
       "token": "",
-      "lastSyncedAt": 1793993422394
+      "lastSyncedAt": 1793993440259
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f",
