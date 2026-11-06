@@ -1,7 +1,19 @@
 {
   "userId": "fatemeh",
   "transactions": [],
-  "cards": [],
+  "cards": [
+    {
+      "title": "بلو",
+      "bankId": "blu",
+      "cardNumber": "6219861992099399",
+      "shebaNumber": "IR390560611828005987298401",
+      "initialBalance": 2945231,
+      "expiryDate": "08/05",
+      "cardColorTheme": "auto",
+      "patternId": "topographic",
+      "id": "card_1793987187281"
+    }
+  ],
   "categories": [
     {
       "id": "cat_groceries",
@@ -301,7 +313,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793984178040,
+  "updatedAt": 1793987187281,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -320,8 +332,38 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793984178851
+      "lastSyncedAt": 1793987188091
     }
   },
+  "usersRegistry": [
+    {
+      "id": "hootan",
+      "name": "هوتن",
+      "avatarColor": "#10b981",
+      "createdAt": 1793984075526,
+      "pinCode": "7077"
+    },
+    {
+      "id": "fatemeh",
+      "name": "فاطمه",
+      "avatarColor": "#f43f5e",
+      "createdAt": 1793984178040,
+      "pinCode": "0611"
+    },
+    {
+      "id": "user_1793986944850",
+      "name": "فهیمه",
+      "avatarColor": "#0ea5e9",
+      "createdAt": 1793986944850,
+      "pinCode": "7077"
+    },
+    {
+      "id": "user_1793986955696",
+      "name": "فهیمه",
+      "avatarColor": "#8b5cf6",
+      "createdAt": 1793986955696,
+      "pinCode": "1320"
+    }
+  ],
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
 }
