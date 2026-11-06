@@ -2,6 +2,23 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "برداشت بانکی (پیامک)",
+      "amount": 4002150,
+      "type": "expense",
+      "categoryId": "cat_home",
+      "subCategoryId": "sub_rent",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987262928",
+      "jalaliDate": "1405/08/15",
+      "time": "18:59",
+      "note": "‪300344319345‬ 40,021,500- 1405/8/15-18:59 مانده:5,978,500",
+      "smsHash": "sms_9571578b",
+      "id": "tx_1793989321124_0",
+      "createdAt": 1793989321124
+    },
+    {
       "title": "اجاره",
       "amount": 4600000,
       "type": "income",
@@ -433,8 +450,10 @@
     "rem_2",
     "rem_3"
   ],
-  "importedSmsHashes": [],
-  "updatedAt": 1793989260454,
+  "importedSmsHashes": [
+    "sms_9571578b"
+  ],
+  "updatedAt": 1793989321124,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -453,7 +472,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793989307929
+      "lastSyncedAt": 1793989323318
     }
   },
   "usersRegistry": [
