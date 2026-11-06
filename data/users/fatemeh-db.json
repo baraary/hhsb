@@ -1,6 +1,23 @@
 {
   "userId": "fatemeh",
-  "transactions": [],
+  "transactions": [
+    {
+      "title": "اجاره",
+      "amount": 4600000,
+      "type": "income",
+      "categoryId": "cat_salary",
+      "subCategoryId": "sub_monthly_salary",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987262928",
+      "jalaliDate": "1405/08/15",
+      "time": "18:46",
+      "note": "",
+      "id": "tx_1793989260454",
+      "createdAt": 1793989260454
+    }
+  ],
   "cards": [
     {
       "title": "بلو",
@@ -417,7 +434,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793989053592,
+  "updatedAt": 1793989260454,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -436,7 +453,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793989250988
+      "lastSyncedAt": 1793989261259
     }
   },
   "usersRegistry": [
