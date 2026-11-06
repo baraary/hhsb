@@ -63,7 +63,7 @@
       "bankId": "pasargad",
       "cardNumber": "5022291617181563",
       "shebaNumber": "IR530570077700014471733001",
-      "initialBalance": 0,
+      "initialBalance": 623373158,
       "expiryDate": "10/02",
       "cardColorTheme": "auto",
       "patternId": "aurora_ribbons",
@@ -453,7 +453,7 @@
   "importedSmsHashes": [
     "sms_9571578b"
   ],
-  "updatedAt": 1793989321124,
+  "updatedAt": 1793989466350,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -472,7 +472,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793989408453
+      "lastSyncedAt": 1793989468569
     }
   },
   "usersRegistry": [
