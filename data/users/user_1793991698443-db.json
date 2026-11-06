@@ -19,7 +19,18 @@
       "createdAt": 1793993137496
     }
   ],
-  "cards": [],
+  "cards": [
+    {
+      "title": "بلو بانک",
+      "bankId": "blu",
+      "cardNumber": "6219861995578035",
+      "initialBalance": 0,
+      "expiryDate": "06/05",
+      "cardColorTheme": "auto",
+      "patternId": "sound_spectrum",
+      "id": "card_1793993202007"
+    }
+  ],
   "categories": [
     {
       "id": "cat_groceries",
@@ -321,7 +332,7 @@
   "importedSmsHashes": [
     "sms_e168706f"
   ],
-  "updatedAt": 1793993137497,
+  "updatedAt": 1793993202007,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -340,7 +351,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1793993138322
+      "lastSyncedAt": 1793993202823
     }
   },
   "usersRegistry": [
