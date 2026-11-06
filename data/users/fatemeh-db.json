@@ -361,14 +361,27 @@
       "monthlyLimit": 4000000
     }
   ],
-  "reminders": [],
+  "reminders": [
+    {
+      "title": "وام ٢٠٠ تومنی ملی",
+      "amount": 7741900,
+      "dueDate": "1405/08/16",
+      "category": "installment",
+      "person": "fatemeh",
+      "isPaid": false,
+      "recurrence": "monthly",
+      "totalInstallments": 34,
+      "paidInstallments": 0,
+      "id": "rem_1793988663680"
+    }
+  ],
   "dismissedReminderIds": [
     "rem_1",
     "rem_2",
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793987845177,
+  "updatedAt": 1793988663680,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -387,7 +400,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793987847684
+      "lastSyncedAt": 1793988664491
     }
   },
   "usersRegistry": [
