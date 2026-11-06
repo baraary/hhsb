@@ -363,6 +363,18 @@
   ],
   "reminders": [
     {
+      "title": "وام ازدواج",
+      "amount": 2727000,
+      "dueDate": "1405/08/25",
+      "category": "installment",
+      "person": "fatemeh",
+      "isPaid": false,
+      "recurrence": "monthly",
+      "totalInstallments": 120,
+      "paidInstallments": 0,
+      "id": "rem_1793989053592"
+    },
+    {
       "title": "قسط مهر",
       "amount": 1727000,
       "dueDate": "1405/09/13",
@@ -405,7 +417,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793988940422,
+  "updatedAt": 1793989053592,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -424,7 +436,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793989045765
+      "lastSyncedAt": 1793989054397
     }
   },
   "usersRegistry": [
