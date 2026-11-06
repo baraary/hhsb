@@ -45,6 +45,17 @@
       "cardColorTheme": "auto",
       "patternId": "starfield_mesh",
       "id": "card_1793987571643"
+    },
+    {
+      "title": "ملی مشکی",
+      "bankId": "melli",
+      "cardNumber": "6037997214411713",
+      "shebaNumber": "IR660170000000350109536007",
+      "initialBalance": 263,
+      "expiryDate": "09/04",
+      "cardColorTheme": "midnight_slate",
+      "patternId": "bauhaus_arcs",
+      "id": "card_1793987765564"
     }
   ],
   "categories": [
@@ -346,7 +357,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793987591616,
+  "updatedAt": 1793987765564,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -365,7 +376,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793987757075
+      "lastSyncedAt": 1793987766372
     }
   },
   "usersRegistry": [
