@@ -206,6 +206,16 @@
       "initialBalance": 0,
       "expiryDate": "09/06",
       "id": "card_1793970061226"
+    },
+    {
+      "title": "رسالت",
+      "bankId": "resalat",
+      "cardNumber": "5041721007222046",
+      "shebaNumber": "IR650700001000119818268001",
+      "owner": "fatemeh",
+      "initialBalance": 0,
+      "expiryDate": "06/10",
+      "id": "card_1793970307753"
     }
   ],
   "categories": [
@@ -502,18 +512,6 @@
   ],
   "reminders": [
     {
-      "title": "قسط رفاه هوتن، سال دوم",
-      "amount": 5851400,
-      "dueDate": "1405/09/25",
-      "category": "installment",
-      "person": "hootan",
-      "isPaid": false,
-      "recurrence": "monthly",
-      "totalInstallments": 12,
-      "paidInstallments": 0,
-      "id": "rem_1793970303875"
-    },
-    {
       "title": "قسط رفاه هوتن",
       "amount": 5749046,
       "dueDate": "1405/08/25",
@@ -537,13 +535,13 @@
     "sms_f68d3337",
     "sms_bef2f190"
   ],
-  "updatedAt": 1793970303875,
+  "updatedAt": 1793970307753,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
     "sharedLabel": "مشترک",
     "currencyUnit": "تومان",
-    "darkMode": true,
+    "darkMode": false,
     "themeMode": "system",
     "colorTheme": "turquoise",
     "pinCode": "",
@@ -555,7 +553,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793970304684
+      "lastSyncedAt": 1793970308559
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
