@@ -40,7 +40,7 @@
       "bankId": "tejarat",
       "cardNumber": "5859831146368377",
       "shebaNumber": "IR240180000000138109071176",
-      "initialBalance": 0,
+      "initialBalance": 54900,
       "expiryDate": "08/02",
       "cardColorTheme": "auto",
       "patternId": "starfield_mesh",
@@ -346,7 +346,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793987571643,
+  "updatedAt": 1793987591616,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -365,7 +365,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793987589116
+      "lastSyncedAt": 1793987592422
     }
   },
   "usersRegistry": [
