@@ -294,14 +294,27 @@
       "monthlyLimit": 4000000
     }
   ],
-  "reminders": [],
+  "reminders": [
+    {
+      "title": "قسط وام هوتن",
+      "amount": 9,
+      "dueDate": "1405/08/15",
+      "category": "installment",
+      "person": "user_1793990125525",
+      "isPaid": false,
+      "recurrence": "monthly",
+      "totalInstallments": 12,
+      "paidInstallments": 0,
+      "id": "rem_1793993641847"
+    }
+  ],
   "dismissedReminderIds": [
     "rem_1",
     "rem_2",
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793993543613,
+  "updatedAt": 1793993641847,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -320,7 +333,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1793993544420
+      "lastSyncedAt": 1793993642656
     }
   },
   "usersRegistry": [
