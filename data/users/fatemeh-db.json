@@ -23,6 +23,17 @@
       "cardColorTheme": "pastel_mint",
       "patternId": "japanese_seigaiha",
       "id": "card_1793987262928"
+    },
+    {
+      "title": "ویپاد",
+      "bankId": "pasargad",
+      "cardNumber": "5022291617181563",
+      "shebaNumber": "IR530570077700014471733001",
+      "initialBalance": 0,
+      "expiryDate": "10/02",
+      "cardColorTheme": "auto",
+      "patternId": "aurora_ribbons",
+      "id": "card_1793987459688"
     }
   ],
   "categories": [
@@ -324,7 +335,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793987348868,
+  "updatedAt": 1793987459688,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -343,7 +354,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793987449500
+      "lastSyncedAt": 1793987460498
     }
   },
   "usersRegistry": [
