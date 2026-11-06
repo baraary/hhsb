@@ -9,6 +9,7 @@ import {
 import { CircularIcon } from './CircularIcon';
 import { BankLogoVector, IRANIAN_BANKS } from '../utils/iranianBanks';
 import { ArrowLeft } from 'lucide-react';
+import { MonthlyReportChart } from './MonthlyReportChart';
 
 interface StatsViewProps {
   state: AppState;
@@ -311,6 +312,15 @@ export const StatsView: React.FC<StatsViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* SECTION 0: MONTHLY REPORT BAR CHART (گزارش ماهانه) */}
+      <MonthlyReportChart
+        transactions={transactions}
+        selectedCardId={selectedCardId}
+        selectedMonth={selectedMonth}
+        onSelectMonth={setSelectedMonth}
+        currencyUnit={settings.currencyUnit}
+      />
 
       {/* SECTION 1: CATEGORY BUDGET PROGRESS BARS */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-5">

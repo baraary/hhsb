@@ -208,6 +208,7 @@ export interface AppSettings {
 
 export interface AppState {
   userId?: string;
+  usersRegistry?: UserAccount[];
   transactions: Transaction[];
   cards: BankCard[];
   categories: Category[];

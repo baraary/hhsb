@@ -23,7 +23,7 @@ import { ArchiveView } from './components/ArchiveView';
 import { SettingsView } from './components/SettingsView';
 import { TransactionModal } from './components/TransactionModal';
 import { BankSmsModal } from './components/BankSmsModal';
-import { PWAInstallButton, OfflineIndicator } from './components/PWAInstallButton';
+import { OfflineIndicator } from './components/PWAInstallButton';
 import {
   toEnglishDigits,
   advanceJalaliDate,
@@ -40,6 +40,7 @@ import {
   consumePartnerMagicLinkFromHash,
   pushStateToGitHubDirect,
   pullStateFromGitHubDirect,
+  fetchUsersRegistryFromGitHub,
 } from './utils/githubSync';
 
 const USERS_REGISTRY_KEY = 'hamhesab_users_registry_v3';
@@ -311,13 +312,17 @@ export default function App() {
 
   // Push current user's state to their isolated GitHub file: data/users/${activeUserId}-db.json
   const pushStateToRemote = useCallback(
-    async (currentState: AppState): Promise<{ ok: boolean; error?: string }> => {
+    async (
+      currentState: AppState,
+      overrideUsers?: UserAccount[]
+    ): Promise<{ ok: boolean; error?: string }> => {
       setSyncStatus('syncing');
       setSyncErrorMessage('');
 
       const userFilePath = `data/users/${currentState.userId || activeUserId}-db.json`;
       const stateWithIsolatedPath: AppState = {
         ...currentState,
+        usersRegistry: overrideUsers || currentState.usersRegistry || users,
         settings: {
           ...currentState.settings,
           githubSync: {
@@ -345,12 +350,49 @@ export default function App() {
       setSyncStatus('idle');
       return { ok: false };
     },
-    [activeUserId]
+    [activeUserId, users]
   );
 
   // Pull current user's state from their isolated GitHub file: data/users/${activeUserId}-db.json
   const pullStateFromRemote = useCallback(async () => {
     try {
+      const autoRepo = detectGitHubPagesRepo();
+      const repoOwner =
+        state.settings.githubSync?.repoOwner || autoRepo.repoOwner || '';
+      const repoName =
+        state.settings.githubSync?.repoName || autoRepo.repoName || '';
+      const branch = state.settings.githubSync?.branch || 'main';
+      const token = state.settings.githubSync?.token || '';
+
+      // 1. Fetch global users registry from GitHub so any newly created accounts appear on all devices!
+      if (repoOwner && repoName) {
+        const remoteUsers = await fetchUsersRegistryFromGitHub(
+          repoOwner,
+          repoName,
+          branch,
+          token
+        );
+        if (remoteUsers && remoteUsers.length > 0) {
+          setUsers((prev) => {
+            const mergedMap = new Map<string, UserAccount>();
+            for (const u of prev) {
+              mergedMap.set(u.id, u);
+            }
+            for (const ru of remoteUsers) {
+              if (!ru?.id) continue;
+              const existing = mergedMap.get(ru.id);
+              mergedMap.set(ru.id, {
+                ...(existing || {}),
+                ...ru,
+                name: ru.name || existing?.name || ru.id,
+                pinCode: ru.pinCode || existing?.pinCode || '',
+              });
+            }
+            return Array.from(mergedMap.values());
+          });
+        }
+      }
+
       const userFilePath = `data/users/${state.userId || activeUserId}-db.json`;
       const stateToQuery: AppState = {
         ...state,
@@ -389,12 +431,31 @@ export default function App() {
           return;
         }
         const remotePin = remoteData.settings?.pinCode || '';
-        if (remotePin) {
-          setUsers((prev) =>
-            prev.map((u) =>
-              u.id === activeUserId ? { ...u, pinCode: remotePin } : u
-            )
-          );
+        if (remotePin || Array.isArray(remoteData.usersRegistry)) {
+          setUsers((prev) => {
+            const map = new Map<string, UserAccount>();
+            for (const u of prev) {
+              map.set(
+                u.id,
+                u.id === activeUserId && remotePin ? { ...u, pinCode: remotePin } : u
+              );
+            }
+            if (Array.isArray(remoteData.usersRegistry)) {
+              for (const ru of remoteData.usersRegistry) {
+                if (!ru?.id) continue;
+                const existing = map.get(ru.id);
+                map.set(ru.id, {
+                  ...(existing || {}),
+                  ...ru,
+                  pinCode:
+                    ru.id === activeUserId && remotePin
+                      ? remotePin
+                      : ru.pinCode || existing?.pinCode || '',
+                });
+              }
+            }
+            return Array.from(map.values());
+          });
         }
 
         setState((prev) => {
@@ -619,19 +680,29 @@ export default function App() {
 
     const freshState = loadIsolatedUserState(newUser);
     freshState.settings.pinCode = cleanPin;
+    freshState.usersRegistry = updatedUsers;
     freshState.updatedAt = Date.now();
     localStorage.setItem(getUserStorageKey(newId), JSON.stringify(freshState));
 
-    // Also push the new user's initial PIN-protected file to GitHub if token is present
+    // Also update Hootan's state with the new usersRegistry and push both to GitHub so any device opening the link sees the new user!
+    hasUserEditedRef.current = true;
+    const updatedAdminState: AppState = {
+      ...state,
+      usersRegistry: updatedUsers,
+      updatedAt: Date.now(),
+    };
+    setState(updatedAdminState);
+
     if (state.settings.githubSync?.token) {
       freshState.settings.githubSync = {
         ...state.settings.githubSync,
         filePath: `data/users/${newId}-db.json`,
       };
       pushStateToGitHubDirect(freshState);
+      pushStateToRemote(updatedAdminState, updatedUsers);
     }
 
-    setUserCreatedToast(`حساب مستقل «${cleanName}» با رمز ۴ رقمی ساخته شد.`);
+    setUserCreatedToast(`حساب مستقل «${cleanName}» با رمز ۴ رقمی ساخته و در سرور همگام‌سازی شد.`);
     setTimeout(() => setUserCreatedToast(''), 4000);
   };
 
@@ -641,6 +712,17 @@ export default function App() {
     const remaining = users.filter((u) => u.id !== userIdToDelete);
     setUsers(remaining);
     localStorage.removeItem(getUserStorageKey(userIdToDelete));
+
+    hasUserEditedRef.current = true;
+    const updatedAdminState: AppState = {
+      ...state,
+      usersRegistry: remaining,
+      updatedAt: Date.now(),
+    };
+    setState(updatedAdminState);
+    if (state.settings.githubSync?.token) {
+      pushStateToRemote(updatedAdminState, remaining);
+    }
   };
 
   // Debounced auto-push ONLY when the user has actually edited local state
@@ -1345,13 +1427,8 @@ export default function App() {
             ))}
           </nav>
 
-          {/* Zone 3: Install App / APK + Primary Action CTA */}
+          {/* Zone 3: Primary Action CTA */}
           <div className="flex items-center gap-2 shrink-0">
-            <PWAInstallButton
-              repoOwner={state.settings.githubSync?.repoOwner}
-              repoName={state.settings.githubSync?.repoName}
-              variant="header"
-            />
             <button
               type="button"
               onClick={() => {

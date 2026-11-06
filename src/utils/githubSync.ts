@@ -348,3 +348,110 @@ export async function pullStateFromGitHubDirect(
 
   return { ok: false };
 }
+
+/**
+ * Fetches all registered user accounts from GitHub (`data/users/hootan-db.json` usersRegistry
+ * plus any `data/users/*-db.json` files in the repository) so newly created accounts
+ * appear on every device/browser when opening the app link.
+ */
+export async function fetchUsersRegistryFromGitHub(
+  repoOwner?: string,
+  repoName?: string,
+  branch = 'main',
+  token?: string
+): Promise<import('../types').UserAccount[] | null> {
+  const autoRepo = detectGitHubPagesRepo();
+  const owner = repoOwner?.trim() || autoRepo.repoOwner || 'baraary';
+  const repo = repoName?.trim() || autoRepo.repoName || 'hhsb';
+  if (!owner || !repo) return null;
+
+  const discoveredMap = new Map<string, import('../types').UserAccount>();
+  const palette = ['#10b981', '#f43f5e', '#0ea5e9', '#8b5cf6', '#f59e0b', '#06b6d4'];
+
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'If-None-Match': `"${Date.now()}-${Math.random()}"`,
+  };
+  if (token?.trim()) {
+    headers.Authorization = `Bearer ${token.trim()}`;
+  }
+
+  try {
+    // 1. Check Hootan's master admin file for `usersRegistry`
+    const hootanUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/users/hootan-db.json?ref=${encodeURIComponent(
+      branch
+    )}`;
+    const hRes = await fetch(hootanUrl, { headers, cache: 'no-store' });
+    if (hRes.ok) {
+      const hData = await hRes.json();
+      if (hData?.content) {
+        const parsed = JSON.parse(base64ToUtf8(hData.content));
+        if (Array.isArray(parsed?.usersRegistry)) {
+          for (const u of parsed.usersRegistry) {
+            if (u && u.id && u.name) {
+              discoveredMap.set(u.id, u);
+            }
+          }
+        }
+        if (parsed?.settings?.pinCode && discoveredMap.has('hootan')) {
+          const hUser = discoveredMap.get('hootan')!;
+          discoveredMap.set('hootan', { ...hUser, pinCode: parsed.settings.pinCode });
+        }
+      }
+    }
+
+    // 2. Also scan `data/users/` directory on GitHub for any `*-db.json` user files
+    const dirUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/users?ref=${encodeURIComponent(
+      branch
+    )}`;
+    const dirRes = await fetch(dirUrl, { headers, cache: 'no-store' });
+    if (dirRes.ok) {
+      const files = await dirRes.json();
+      if (Array.isArray(files)) {
+        for (const f of files) {
+          if (typeof f?.name === 'string' && f.name.endsWith('-db.json')) {
+            const userId = f.name.replace(/-db\.json$/, '');
+            if (!discoveredMap.has(userId)) {
+              // Fetch the user file to get its display name and PIN
+              const fileRes = await fetch(
+                `https://api.github.com/repos/${owner}/${repo}/contents/data/users/${f.name}?ref=${encodeURIComponent(
+                  branch
+                )}`,
+                { headers, cache: 'no-store' }
+              );
+              if (fileRes.ok) {
+                const fileJson = await fileRes.json();
+                if (fileJson?.content) {
+                  const userState = JSON.parse(base64ToUtf8(fileJson.content));
+                  const name =
+                    userState?.settings?.userName ||
+                    (userId === 'hootan'
+                      ? 'هوتن'
+                      : userId === 'fatemeh'
+                      ? 'فاطمه'
+                      : userId);
+                  discoveredMap.set(userId, {
+                    id: userId,
+                    name,
+                    avatarColor:
+                      userId === 'hootan'
+                        ? '#10b981'
+                        : userId === 'fatemeh'
+                        ? '#f43f5e'
+                        : palette[discoveredMap.size % palette.length],
+                    createdAt: userState?.updatedAt || Date.now(),
+                    pinCode: userState?.settings?.pinCode || '',
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore network errors
+  }
+
+  return discoveredMap.size > 0 ? Array.from(discoveredMap.values()) : null;
+}
