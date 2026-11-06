@@ -1,6 +1,23 @@
 {
   "transactions": [
     {
+      "title": "پرداخت قسط وام",
+      "amount": 7741900,
+      "type": "expense",
+      "categoryId": "cat_home",
+      "subCategoryId": "sub_rent",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793901616820",
+      "jalaliDate": "1405/08/15",
+      "time": "09:25",
+      "note": "بانك ملي ايران قسط:77,419,000- حساب:87003 مانده:453,260 0815-09:25",
+      "smsHash": "sms_bef2f190",
+      "id": "tx_1793970122851_0",
+      "createdAt": 1793970122851
+    },
+    {
       "title": "خرید کارتی (بانک ملت)",
       "amount": 61000,
       "type": "expense",
@@ -493,9 +510,10 @@
     "sms_c1040c42",
     "sms_57329b9",
     "sms_996e970c",
-    "sms_f68d3337"
+    "sms_f68d3337",
+    "sms_bef2f190"
   ],
-  "updatedAt": 1793970061226,
+  "updatedAt": 1793970122851,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
@@ -513,7 +531,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793970093670
+      "lastSyncedAt": 1793970123659
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
