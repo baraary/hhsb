@@ -56,6 +56,17 @@
       "cardColorTheme": "midnight_slate",
       "patternId": "bauhaus_arcs",
       "id": "card_1793987765564"
+    },
+    {
+      "title": "ملی جاری",
+      "bankId": "melli",
+      "cardNumber": "6037991247343324",
+      "shebaNumber": "IR620170000000122526787003",
+      "initialBalance": 45000,
+      "expiryDate": "10/03",
+      "cardColorTheme": "auto",
+      "patternId": "guilloche",
+      "id": "card_1793987845177"
     }
   ],
   "categories": [
@@ -357,7 +368,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793987765564,
+  "updatedAt": 1793987845177,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -376,7 +387,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793987843052
+      "lastSyncedAt": 1793987845986
     }
   },
   "usersRegistry": [
