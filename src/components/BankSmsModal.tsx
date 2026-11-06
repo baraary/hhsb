@@ -1,10 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import {
-  AppState,
-  PersonId,
-  RecorderId,
-  Transaction,
-} from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { Calendar, Clipboard, Smartphone, Check, Plus, X } from 'lucide-react';
+import { AppState, Transaction } from '../types';
 import {
   ParsedBankSms,
   parseIranianBankSms,
@@ -14,8 +11,24 @@ import {
   requestAndroidSmsPermission,
   readAndroidBankSmsInbox,
 } from '../utils/bankSmsParser';
-import { formatMoney, toPersianDigits } from '../utils/persian';
+import {
+  formatMoney,
+  toPersianDigits,
+  toEnglishDigits,
+  getCurrentJalaliDateStr,
+  shiftJalaliDateByDays,
+  formatJalaliReadable,
+} from '../utils/persian';
 import { CircularIcon } from './CircularIcon';
+import { JalaliDateInput } from './JalaliDateTimePicker';
+
+export type SmsDateRangePreset =
+  | 'today'
+  | 'yesterday'
+  | 'week'
+  | 'month'
+  | 'custom'
+  | 'all';
 
 interface BankSmsModalProps {
   isOpen: boolean;
@@ -24,6 +37,16 @@ interface BankSmsModalProps {
   onImportTransactions: (txs: Omit<Transaction, 'id' | 'createdAt'>[]) => void;
   onUpdateAutoCheckClipboard: (enabled: boolean) => void;
   initialRawSms?: string;
+}
+
+function normalizeJalaliComparable(dateStr: string): string {
+  const clean = toEnglishDigits(dateStr || '').trim();
+  const parts = clean.split('/');
+  if (parts.length !== 3) return clean;
+  const y = parts[0].length === 2 ? `14${parts[0]}` : parts[0].padStart(4, '0');
+  const m = parts[1].padStart(2, '0');
+  const d = parts[2].padStart(2, '0');
+  return `${y}/${m}/${d}`;
 }
 
 export const BankSmsModal: React.FC<BankSmsModalProps> = ({
@@ -36,11 +59,33 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
 }) => {
   const { cards, categories, transactions, importedSmsHashes = [], settings } = state;
 
+  const todayJalali = useMemo(() => getCurrentJalaliDateStr(), [isOpen]);
+  const yesterdayJalali = useMemo(
+    () => shiftJalaliDateByDays(todayJalali, -1),
+    [todayJalali]
+  );
+  const weekAgoJalali = useMemo(
+    () => shiftJalaliDateByDays(todayJalali, -7),
+    [todayJalali]
+  );
+  const monthAgoJalali = useMemo(
+    () => shiftJalaliDateByDays(todayJalali, -30),
+    [todayJalali]
+  );
+
+  const [dateRangePreset, setDateRangePreset] = useState<SmsDateRangePreset>('week');
+  const [customFromDate, setCustomFromDate] = useState<string>(() =>
+    shiftJalaliDateByDays(getCurrentJalaliDateStr(), -7)
+  );
+  const [customToDate, setCustomToDate] = useState<string>(() =>
+    getCurrentJalaliDateStr()
+  );
+
   const [rawInput, setRawInput] = useState(initialRawSms);
   const [convertRialToToman, setConvertRialToToman] = useState(
     settings.currencyUnit === 'تومان'
   );
-  const [parsedItems, setParsedItems] = useState<ParsedBankSms[]>([]);
+  const [allParsedItems, setAllParsedItems] = useState<ParsedBankSms[]>([]);
   const [statusMsg, setStatusMsg] = useState<string>('');
   const [isAndroidBridgeAvailable, setIsAndroidBridgeAvailable] = useState(false);
 
@@ -51,9 +96,53 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
   useEffect(() => {
     if (initialRawSms && isOpen) {
       setRawInput(initialRawSms);
+      setDateRangePreset('all');
       handleParseRawText(initialRawSms, convertRialToToman);
     }
   }, [initialRawSms, isOpen]);
+
+  const activeRangeBounds = useMemo((): { from: string; to: string } | null => {
+    if (dateRangePreset === 'all') return null;
+    if (dateRangePreset === 'today') {
+      return { from: todayJalali, to: todayJalali };
+    }
+    if (dateRangePreset === 'yesterday') {
+      return { from: yesterdayJalali, to: yesterdayJalali };
+    }
+    if (dateRangePreset === 'week') {
+      return { from: weekAgoJalali, to: todayJalali };
+    }
+    if (dateRangePreset === 'month') {
+      return { from: monthAgoJalali, to: todayJalali };
+    }
+    const normA = normalizeJalaliComparable(customFromDate || todayJalali);
+    const normB = normalizeJalaliComparable(customToDate || todayJalali);
+    return normA <= normB
+      ? { from: normA, to: normB }
+      : { from: normB, to: normA };
+  }, [
+    dateRangePreset,
+    todayJalali,
+    yesterdayJalali,
+    weekAgoJalali,
+    monthAgoJalali,
+    customFromDate,
+    customToDate,
+  ]);
+
+  const filteredParsedItems = useMemo(() => {
+    if (!activeRangeBounds) return allParsedItems;
+    const { from, to } = activeRangeBounds;
+    return allParsedItems.filter((item) => {
+      const itemDate = normalizeJalaliComparable(item.jalaliDate);
+      const recvDate = item.receivedJalaliDate
+        ? normalizeJalaliComparable(item.receivedJalaliDate)
+        : null;
+      const inRangeBySmsDate = itemDate >= from && itemDate <= to;
+      const inRangeByRecvDate = recvDate ? recvDate >= from && recvDate <= to : false;
+      return inRangeBySmsDate || inRangeByRecvDate;
+    });
+  }, [allParsedItems, activeRangeBounds]);
 
   if (!isOpen) return null;
 
@@ -76,7 +165,7 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
       }
     }
 
-    setParsedItems(results);
+    setAllParsedItems(results);
     if (text.trim() && results.length === 0) {
       setStatusMsg(
         'متن وارد شده شبیه پیامک بانکی تشخیص داده نشد. مطمئن شوید مبلغ و کلمه واریز/برداشت/خرید در متن وجود دارد.'
@@ -118,9 +207,17 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
       return;
     }
 
-    const inboxSms = readAndroidBankSmsInbox(35);
+    // Read a larger batch so 1-week, 1-month, and custom date ranges are fully covered
+    const scanLimit =
+      dateRangePreset === 'today' || dateRangePreset === 'yesterday'
+        ? 60
+        : dateRangePreset === 'week'
+        ? 120
+        : 250;
+
+    const inboxSms = readAndroidBankSmsInbox(scanLimit);
     if (inboxSms.length === 0) {
-      setStatusMsg('هیچ پیامک بانکی در صندوق پیامک‌های اخیر گوشی پیدا نشد.');
+      setStatusMsg('هیچ پیامک بانکی در صندوق پیامک‌های گوشی پیدا نشد.');
       return;
     }
 
@@ -131,25 +228,46 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
         cards,
         categories,
         convertRialToToman,
-        item.address
+        item.address,
+        item.date
       );
       if (parsed) {
         results.push(parsed);
       }
     }
 
-    setParsedItems(results);
+    setAllParsedItems(results);
+
+    // Count how many match the currently selected date range
+    const matchingCount = activeRangeBounds
+      ? results.filter((item) => {
+          const itemDate = normalizeJalaliComparable(item.jalaliDate);
+          const recvDate = item.receivedJalaliDate
+            ? normalizeJalaliComparable(item.receivedJalaliDate)
+            : null;
+          return (
+            (itemDate >= activeRangeBounds.from && itemDate <= activeRangeBounds.to) ||
+            (recvDate
+              ? recvDate >= activeRangeBounds.from && recvDate <= activeRangeBounds.to
+              : false)
+          );
+        }).length
+      : results.length;
+
     setStatusMsg(
-      `${toPersianDigits(results.length)} پیامک بانکی از صندوق پیامک گوشی استخراج شد.`
+      `${toPersianDigits(matchingCount)} پیامک بانکی در بازه زمانی انتخابی استخراج شد (کل پیامک‌های بانکی بررسی‌شده: ${toPersianDigits(
+        results.length
+      )} مورد).`
     );
   };
 
   const handleLoadSampleSms = () => {
+    const threeDaysAgo = shiftJalaliDateByDays(todayJalali, -3);
     const sample = `بانک ملت
 برداشت 3,850,000 ریال
 حساب *8904
 خرید از فروشگاه هایپراستار
-1403/08/15-20:15
+${todayJalali}-20:15
 مانده: 485,000,000 ریال
 
 ---
@@ -157,20 +275,30 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
 بلوبانک
 واریز به حساب شما
 مبلغ: 85,000,000 ریال
-1403/08/15 14:30
-موجودی: 324,000,000 ریال`;
+${yesterdayJalali} 14:30
+موجودی: 324,000,000 ریال
+
+---
+
+بانک سامان
+برداشت: 1,450,000 ریال
+خرید از کافه لمیز
+${threeDaysAgo} 18:45
+مانده: 112,000,000 ریال`;
     setRawInput(sample);
     handleParseRawText(sample, convertRialToToman);
   };
 
   const handleUpdateParsedItem = (
-    idx: number,
+    smsHash: string,
     patch: Partial<ParsedBankSms>
   ) => {
-    setParsedItems((prev) =>
-      prev.map((item, i) => (i === idx ? { ...item, ...patch } : item))
+    setAllParsedItems((prev) =>
+      prev.map((item) => (item.smsHash === smsHash ? { ...item, ...patch } : item))
     );
   };
+
+  const activeUserId = state.userId || 'hootan';
 
   const handleImportSingle = (item: ParsedBankSms) => {
     onImportTransactions([
@@ -181,8 +309,8 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
         categoryId: item.categoryId,
         subCategoryId: item.subCategoryId,
         tags: [],
-        spentBy: item.spentBy,
-        recordedBy: item.recordedBy,
+        spentBy: activeUserId,
+        recordedBy: activeUserId,
         cardId: item.matchedCardId,
         jalaliDate: item.jalaliDate,
         time: item.time,
@@ -194,7 +322,9 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
   };
 
   const handleImportAllNew = () => {
-    const newItems = parsedItems.filter((item) => !isAlreadyImported(item.smsHash));
+    const newItems = filteredParsedItems.filter(
+      (item) => !isAlreadyImported(item.smsHash)
+    );
     if (newItems.length === 0) return;
 
     onImportTransactions(
@@ -205,8 +335,8 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
         categoryId: item.categoryId,
         subCategoryId: item.subCategoryId,
         tags: [],
-        spentBy: item.spentBy,
-        recordedBy: item.recordedBy,
+        spentBy: activeUserId,
+        recordedBy: activeUserId,
         cardId: item.matchedCardId,
         jalaliDate: item.jalaliDate,
         time: item.time,
@@ -217,13 +347,29 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
     onClose();
   };
 
-  const unimportedCount = parsedItems.filter(
+  const unimportedCount = filteredParsedItems.filter(
     (item) => !isAlreadyImported(item.smsHash)
   ).length;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 backdrop-blur-xs p-0 sm:p-4">
-      <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5 shadow-2xl">
+  const hiddenByDateFilterCount = allParsedItems.length - filteredParsedItems.length;
+
+  const DATE_PRESETS: { id: SmsDateRangePreset; label: string }[] = [
+    { id: 'today', label: 'امروز' },
+    { id: 'yesterday', label: 'دیروز' },
+    { id: 'week', label: 'یک هفته قبل' },
+    { id: 'month', label: 'یک ماه قبل' },
+    { id: 'custom', label: 'بازه دلخواه' },
+    { id: 'all', label: 'همه تاریخ‌ها' },
+  ];
+
+  const modalContent = (
+    <div
+      data-no-swipe="true"
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 backdrop-blur-xs p-0 sm:p-4"
+    >
+      <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5">
           <div className="flex items-center gap-3">
@@ -233,7 +379,7 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
                 خواندن هوشمند پیامک‌های بانکی (SMS)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                تشخیص خودکار مبلغ (ریال به تومان)، نوع تراکنش، کارت بانکی، تاریخ و ساعت
+                فیلتر بر اساس بازه زمانی، تشخیص خودکار مبلغ، کارت بانکی، تاریخ و ساعت
               </p>
             </div>
           </div>
@@ -241,10 +387,76 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1 cursor-pointer"
           >
-            بستن
+            <X size={14} />
+            <span>بستن</span>
           </button>
+        </div>
+
+        {/* Date Range Filter Selector */}
+        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-800 dark:text-slate-200">
+              <Calendar size={14} className="theme-text" />
+              <span>بازه زمانی خواندن پیامک‌های بانکی:</span>
+            </div>
+
+            {activeRangeBounds ? (
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tabular-nums">
+                {activeRangeBounds.from === activeRangeBounds.to
+                  ? formatJalaliReadable(activeRangeBounds.from)
+                  : `از ${formatJalaliReadable(activeRangeBounds.from)} تا ${formatJalaliReadable(
+                      activeRangeBounds.to
+                    )}`}
+              </span>
+            ) : (
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                بدون محدودیت تاریخ
+              </span>
+            )}
+          </div>
+
+          <div
+            data-no-swipe="true"
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
+            className="flex flex-wrap items-center gap-1.5"
+          >
+            {DATE_PRESETS.map((preset) => {
+              const active = dateRangePreset === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setDateRangePreset(preset.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer transition-all ${
+                    active
+                      ? 'theme-bg text-white shadow-xs'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {dateRangePreset === 'custom' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+              <JalaliDateInput
+                label="از تاریخ"
+                value={customFromDate}
+                onChange={setCustomFromDate}
+              />
+              <JalaliDateInput
+                label="تا تاریخ"
+                value={customToDate}
+                onChange={setCustomToDate}
+              />
+            </div>
+          )}
         </div>
 
         {/* Action Buttons Row: Native Android SMS Inbox + One-Tap Clipboard Paste */}
@@ -254,7 +466,8 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
             onClick={handleReadFromClipboard}
             className="py-3 px-4 rounded-2xl theme-bg text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm cursor-pointer hover:opacity-95 transition-opacity"
           >
-            <span>📋 خواندن خودکار پیامک کپی‌شده (Clipboard)</span>
+            <Clipboard size={15} strokeWidth={2.3} />
+            <span>خواندن خودکار پیامک کپی‌شده (Clipboard)</span>
           </button>
 
           <button
@@ -266,7 +479,8 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
             }`}
           >
-            <span>📲 اسکن صندوق پیامک گوشی (ویژه اپ APK اندروید)</span>
+            <Smartphone size={15} strokeWidth={2.3} />
+            <span>اسکن صندوق پیامک در این بازه (اپ APK)</span>
           </button>
         </div>
 
@@ -310,12 +524,12 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
               onClick={handleLoadSampleSms}
               className="text-[11px] font-bold theme-text hover:underline cursor-pointer"
             >
-              امتحان با نمونه پیامک بانکی
+              امتحان با ۳ نمونه پیامک (امروز، دیروز، هفته قبل)
             </button>
           </div>
 
           <textarea
-            rows={4}
+            rows={3}
             value={rawInput}
             onChange={(e) => {
               setRawInput(e.target.value);
@@ -332,27 +546,44 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
           </div>
         )}
 
+        {/* Notice when some parsed items are hidden by the selected date range */}
+        {allParsedItems.length > 0 && hiddenByDateFilterCount > 0 && (
+          <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="text-slate-600 dark:text-slate-300 font-semibold">
+              {toPersianDigits(hiddenByDateFilterCount)} پیامک خارج از بازه زمانی انتخاب‌شده قرار دارد و پنهان شده است.
+            </span>
+            <button
+              type="button"
+              onClick={() => setDateRangePreset('all')}
+              className="font-extrabold theme-text hover:underline cursor-pointer"
+            >
+              نمایش همه ({toPersianDigits(allParsedItems.length)} مورد)
+            </button>
+          </div>
+        )}
+
         {/* Parsed Transactions Preview List */}
-        {parsedItems.length > 0 && (
+        {filteredParsedItems.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
-                تراکنش‌های استخراج‌شده ({toPersianDigits(parsedItems.length)} مورد)
+                تراکنش‌های استخراج‌شده در این بازه ({toPersianDigits(filteredParsedItems.length)} مورد)
               </h4>
 
               {unimportedCount > 0 && (
                 <button
                   type="button"
                   onClick={handleImportAllNew}
-                  className="px-4 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-sm"
+                  className="px-4 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-sm flex items-center gap-1.5"
                 >
-                  ثبت یکجای همه ({toPersianDigits(unimportedCount)} تراکنش جدید) ✓
+                  <Check size={14} strokeWidth={2.5} />
+                  <span>ثبت یکجای همه ({toPersianDigits(unimportedCount)} تراکنش جدید)</span>
                 </button>
               )}
             </div>
 
             <div className="space-y-3">
-              {parsedItems.map((item, idx) => {
+              {filteredParsedItems.map((item, idx) => {
                 const alreadySaved = isAlreadyImported(item.smsHash);
                 const itemCategories = categories.filter((c) => c.type === item.type);
 
@@ -370,7 +601,7 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
                         <button
                           type="button"
                           onClick={() =>
-                            handleUpdateParsedItem(idx, {
+                            handleUpdateParsedItem(item.smsHash, {
                               type: item.type === 'expense' ? 'income' : 'expense',
                             })
                           }
@@ -409,7 +640,7 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
 
                     {/* Editable Fields before Saving */}
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                      <div className="sm:col-span-4">
+                      <div className="sm:col-span-5">
                         <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
                           عنوان تراکنش
                         </label>
@@ -417,20 +648,22 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
                           type="text"
                           value={item.title}
                           onChange={(e) =>
-                            handleUpdateParsedItem(idx, { title: e.target.value })
+                            handleUpdateParsedItem(item.smsHash, { title: e.target.value })
                           }
                           className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
                         />
                       </div>
 
-                      <div className="sm:col-span-3">
+                      <div className="sm:col-span-4">
                         <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
                           کارت بانکی
                         </label>
                         <select
                           value={item.matchedCardId}
                           onChange={(e) =>
-                            handleUpdateParsedItem(idx, { matchedCardId: e.target.value })
+                            handleUpdateParsedItem(item.smsHash, {
+                              matchedCardId: e.target.value,
+                            })
                           }
                           className="w-full px-2 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
                         >
@@ -450,7 +683,7 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
                           value={item.categoryId}
                           onChange={(e) => {
                             const cat = categories.find((c) => c.id === e.target.value);
-                            handleUpdateParsedItem(idx, {
+                            handleUpdateParsedItem(item.smsHash, {
                               categoryId: e.target.value,
                               subCategoryId: cat?.subCategories[0]?.id || '',
                             });
@@ -464,29 +697,6 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
                           ))}
                         </select>
                       </div>
-
-                      <div className="sm:col-span-2">
-                        <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
-                          سهمِ
-                        </label>
-                        <select
-                          value={item.spentBy}
-                          onChange={(e) =>
-                            handleUpdateParsedItem(idx, {
-                              spentBy: e.target.value as PersonId,
-                              recordedBy:
-                                e.target.value === 'fatemeh'
-                                  ? 'fatemeh'
-                                  : ('hootan' as RecorderId),
-                            })
-                          }
-                          className="w-full px-2 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
-                        >
-                          <option value="shared">{settings.sharedLabel}</option>
-                          <option value="hootan">{settings.hootanName}</option>
-                          <option value="fatemeh">{settings.fatemehName}</option>
-                        </select>
-                      </div>
                     </div>
 
                     <div className="flex items-center justify-between pt-1">
@@ -495,16 +705,18 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
                       </span>
 
                       {alreadySaved ? (
-                        <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 shrink-0">
-                          ✓ قبلاً ثبت شده
+                        <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 shrink-0 flex items-center gap-1">
+                          <Check size={14} strokeWidth={2.5} />
+                          <span>قبلاً ثبت شده</span>
                         </span>
                       ) : (
                         <button
                           type="button"
                           onClick={() => handleImportSingle(item)}
-                          className="px-3.5 py-1.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shrink-0"
+                          className="px-3.5 py-1.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shrink-0 flex items-center gap-1"
                         >
-                          ثبت این تراکنش +
+                          <Plus size={14} strokeWidth={2.5} />
+                          <span>ثبت این تراکنش</span>
                         </button>
                       )}
                     </div>
@@ -517,4 +729,8 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 };

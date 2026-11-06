@@ -1,4 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import {
+  Smartphone,
+  Sun,
+  Moon,
+  Lock,
+  Link2,
+  FileText,
+  Download,
+  Upload,
+  RefreshCw,
+  Check,
+  ShieldCheck,
+  Plus,
+  X,
+  ArrowLeft,
+} from 'lucide-react';
 import {
   AppState,
   Category,
@@ -6,8 +22,8 @@ import {
   ColorThemeId,
   ThemeMode,
   TransactionType,
-  BudgetGoal,
   GitHubSyncConfig,
+  UserAccount,
 } from '../types';
 import { CircularIcon, AVAILABLE_ICONS, IconName } from './CircularIcon';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -16,6 +32,11 @@ import { createPartnerMagicLink, detectGitHubPagesRepo } from '../utils/githubSy
 
 interface SettingsViewProps {
   state: AppState;
+  users: UserAccount[];
+  activeUserId: string;
+  onSwitchUser: (userId: string) => void;
+  onCreateUser: (name: string) => void;
+  onDeleteUser?: (userId: string) => void;
   onUpdateSettings: (partial: Partial<AppState['settings']>) => void;
   onUpdateBudget: (categoryId: string, monthlyLimit: number) => void;
   onSaveCategory: (cat: Category) => void;
@@ -23,7 +44,7 @@ interface SettingsViewProps {
   onSaveTag: (tag: TagItem) => void;
   onDeleteTag: (tagId: string) => void;
   onImportState: (newState: AppState) => void;
-  onResetDefaults: () => void;
+  onClearCurrentUserData: () => void;
   onManualSyncNow: () => Promise<void>;
   onLockAppNow?: () => void;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'error';
@@ -60,6 +81,11 @@ const PALETTE_COLORS = [
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   state,
+  users,
+  activeUserId,
+  onSwitchUser,
+  onCreateUser,
+  onDeleteUser,
   onUpdateSettings,
   onUpdateBudget,
   onSaveCategory,
@@ -67,17 +93,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onSaveTag,
   onDeleteTag,
   onImportState,
-  onResetDefaults,
+  onClearCurrentUserData,
   onManualSyncNow,
   onLockAppNow,
   syncStatus,
   syncErrorMessage,
 }) => {
   const { settings, categories, tags, budgets } = state;
+  const userName = settings.userName || settings.hootanName || 'کاربر';
+  const isAdminHootan = activeUserId === 'hootan';
 
   const [activeSection, setActiveSection] = useState<
     'appearance' | 'budgets' | 'categories' | 'tags' | 'backup'
   >('appearance');
+
+  // New User Creation state (Only accessible to Hootan)
+  const [newUserName, setNewUserName] = useState('');
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [confirmClearData, setConfirmClearData] = useState(false);
 
   // Category Editor States
   const [editingCat, setEditingCat] = useState<Category | null>(null);
@@ -95,6 +128,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // PIN & Profile Save Feedback
   const [pinDraft, setPinDraft] = useState<string>(settings.pinCode || '');
   const [pinSavedToast, setPinSavedToast] = useState<string>('');
+
+  useEffect(() => {
+    setPinDraft(settings.pinCode || '');
+  }, [settings.pinCode, activeUserId]);
 
   // GitHub Sync Feedback & Magic Link
   const [ghSavedToast, setGhSavedToast] = useState<string>('');
@@ -202,18 +239,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTagName('');
   };
 
+  const defaultUserFilePath = `data/users/${activeUserId}-db.json`;
+
   const handleGitHubSyncField = (partial: Partial<GitHubSyncConfig>) => {
     const current: GitHubSyncConfig = settings.githubSync || {
       enabled: true,
       repoOwner: '',
       repoName: '',
       branch: 'main',
-      filePath: 'data/hamhesab-db.json',
+      filePath: defaultUserFilePath,
       token: '',
     };
     onUpdateSettings({
       githubSync: {
         ...current,
+        filePath: defaultUserFilePath,
         ...partial,
       },
     });
@@ -226,19 +266,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `hamhesab-backup-${Date.now()}.json`;
+    a.download = `hamhesab-${activeUserId}-backup-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  // Download Single-File Standalone HTML for GitHub Pages / Mobile Upload
+  // Download Single-File Standalone HTML Report
   const handleDownloadStandaloneHTML = () => {
     const standaloneHtml = `<!DOCTYPE html>
 <html lang="fa" dir="rtl" class="${settings.darkMode ? 'dark' : ''}">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>گزارش و نسخه پشتیبان هم‌حساب (${settings.hootanName} و ${settings.fatemehName})</title>
+<title>گزارش مالی شخصی ${userName}</title>
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
   body { font-family: 'Vazirmatn', sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; }
@@ -253,11 +293,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 </head>
 <body>
   <div class="card">
-    <h1>هم‌حساب | دفتر کل مالی ${settings.hootanName} و ${settings.fatemehName}</h1>
+    <h1>هم‌حساب | دفتر کل مالی شخصی ${userName}</h1>
     <p>تعداد تراکنش‌های ذخیره شده: ${toPersianDigits(state.transactions.length)} مورد | تعداد کارت‌های بانکی: ${toPersianDigits(state.cards.length)} کارت</p>
     <table>
       <thead>
-        <tr><th>عنوان</th><th>مبلغ (${settings.currencyUnit})</th><th>خرج/درآمد</th><th>ثبت‌کننده</th><th>تاریخ و ساعت</th></tr>
+        <tr><th>عنوان</th><th>مبلغ (${settings.currencyUnit})</th><th>نوع</th><th>تاریخ و ساعت</th></tr>
       </thead>
       <tbody>
         ${state.transactions
@@ -265,14 +305,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             (t) => `<tr>
           <td>${t.title}</td>
           <td class="${t.type === 'expense' ? 'exp' : 'inc'}">${formatMoney(t.amount)}</td>
-          <td>${
-            t.spentBy === 'hootan'
-              ? settings.hootanName
-              : t.spentBy === 'fatemeh'
-              ? settings.fatemehName
-              : settings.sharedLabel
-          }</td>
-          <td>${t.recordedBy === 'hootan' ? settings.hootanName : settings.fatemehName}</td>
+          <td>${t.type === 'expense' ? 'هزینه' : 'درآمد'}</td>
           <td>${toPersianDigits(t.jalaliDate)} - ${toPersianDigits(t.time)}</td>
         </tr>`
           )
@@ -286,7 +319,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `index-hamhesab-report.html`;
+    a.download = `hamhesab-${activeUserId}-report.html`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -300,7 +333,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         const parsed = JSON.parse(String(event.target?.result));
         if (parsed && Array.isArray(parsed.transactions) && Array.isArray(parsed.cards)) {
           onImportState(parsed);
-          setImportMessage('فایل پشتیبان با موفقیت بارگذاری و همگام‌سازی شد ✓');
+          setImportMessage('فایل پشتیبان با موفقیت در حساب شما بارگذاری شد');
           setTimeout(() => setImportMessage(''), 4000);
         } else {
           setImportMessage('فرمت فایل انتخاب شده معتبر نیست.');
@@ -314,35 +347,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   return (
     <div className="space-y-6 pb-8">
-      {/* Sub-Navigation inside Settings */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3">
+      {/* Sub-Navigation inside Settings (Isolated from Page Tab Swipe) */}
+      <div
+        data-no-swipe="true"
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
+        className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3"
+      >
         <div className="flex items-center gap-3">
           <CircularIcon name="settings" size="md" color="#10b981" />
           <div>
             <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
-              تنظیمات، بودجه‌بندی و همگام‌سازی خودکار
+              تنظیمات حساب شخصی «{userName}» و مدیریت کاربران
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              شخصی‌سازی ۱۰ تم رنگی (شامل مونوکروم)، سقف بودجه هر دسته‌بندی، زیردسته‌ها و سینک خودکار
+              حساب‌های کاربری کاملاً مجزا بدون دسترسی به دیتای یکدیگر + تم و بودجه اختصاصی
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800">
+        <div
+          data-no-swipe="true"
+          className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 overflow-x-auto max-w-full touch-pan-x"
+        >
           {(
             [
-              { id: 'appearance', label: 'ظاهر و ۱۰ تم رنگی' },
+              { id: 'appearance', label: 'کاربران و ظاهر اپ' },
               { id: 'budgets', label: 'سقف بودجه دسته‌ها' },
               { id: 'categories', label: 'دسته‌ها و زیردسته‌ها' },
               { id: 'tags', label: 'مدیریت تگ‌ها' },
-              { id: 'backup', label: 'سینک خودکار و گیت‌هاب' },
+              { id: 'backup', label: 'پشتیبان‌گیری و گیت‌هاب' },
             ] as const
           ).map((sec) => (
             <button
               key={sec.id}
               type="button"
               onClick={() => setActiveSection(sec.id)}
-              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeSection === sec.id
                   ? 'theme-bg text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -354,12 +396,154 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* SECTION 1: APPEARANCE, DARK MODE, 10 COLOR THEMES & COUPLE NAMES */}
+      {/* SECTION 1: MULTI-USER ISOLATED ACCOUNTS & APPEARANCE */}
       {activeSection === 'appearance' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Dark Mode, Auto Phone Theme & 10 Color Themes */}
-          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-5">
-            <div className="flex items-center justify-between gap-3">
+        <div className="space-y-5">
+          {/* Multi-User Account Switcher & Admin Creator Card */}
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <CircularIcon name="users" size="md" color="#10b981" />
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                    حساب‌های کاربری مجزا (ایزوله و مستقل)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    هر کاربر دیتابیس، کارت‌ها، تراکنش‌ها، رمز ورود و تنظیمات کاملاً جداگانه‌ای دارد.
+                  </p>
+                </div>
+              </div>
+
+              {isAdminHootan ? (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingUser((prev) => !prev)}
+                  className="px-4 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center gap-1.5 whitespace-nowrap self-start sm:self-auto"
+                >
+                  {isAddingUser ? (
+                    <>
+                      <X size={14} />
+                      <span>بستن فرم</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={14} strokeWidth={2.5} />
+                      <span>افزودن کاربر جدید (ویژه مدیر)</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 self-start sm:self-auto">
+                  <ShieldCheck size={14} className="text-emerald-500 shrink-0" />
+                  <span>افزودن کاربر جدید مخصوص مدیر اصلی (هوتن) است</span>
+                </div>
+              )}
+            </div>
+
+            {isAdminHootan && isAddingUser && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!newUserName.trim()) return;
+                  onCreateUser(newUserName.trim());
+                  setNewUserName('');
+                  setIsAddingUser(false);
+                }}
+                className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
+              >
+                <input
+                  type="text"
+                  value={newUserName}
+                  onChange={(e) => setNewUserName(e.target.value)}
+                  placeholder="نام کاربر جدید (مثلاً: علی، سارا...)"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                />
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                >
+                  <Check size={14} strokeWidth={2.5} />
+                  <span>ساخت حساب کاربری مستقل</span>
+                </button>
+              </form>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {users.map((u) => {
+                const isCurrent = u.id === activeUserId;
+                const isUserAdmin = u.id === 'hootan';
+                return (
+                  <div
+                    key={u.id}
+                    onClick={() => {
+                      if (!isCurrent) onSwitchUser(u.id);
+                    }}
+                    className={`p-4 rounded-2xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-slate-50/50 dark:bg-slate-800/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-sm shrink-0 shadow-xs"
+                        style={{ backgroundColor: u.avatarColor || '#10b981' }}
+                      >
+                        {u.name.slice(0, 1)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                            {u.name}
+                          </span>
+                          {isUserAdmin && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                              <ShieldCheck size={12} />
+                              <span>مدیر</span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                          {isCurrent ? (
+                            <>
+                              <Check size={12} className="text-emerald-500" />
+                              <span>حساب فعال فعلی</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>ورود به این حساب</span>
+                              <ArrowLeft size={11} />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {isAdminHootan &&
+                      !isCurrent &&
+                      onDeleteUser &&
+                      u.id !== 'hootan' &&
+                      u.id !== 'fatemeh' && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteUser(u.id);
+                          }}
+                          className="text-xs text-rose-500 hover:underline font-bold px-2 py-1 cursor-pointer"
+                        >
+                          حذف
+                        </button>
+                      )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Personal Appearance: Dark Mode & 10 Color Themes */}
+            <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-5">
               <div className="flex items-center gap-3">
                 <CircularIcon
                   name={settings.darkMode ? 'moon' : 'sun'}
@@ -368,253 +552,285 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 />
                 <div>
                   <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                    حالت نمایش (روشن، تاریک، خودکار با گوشی) و ۱۰ تم رنگی
+                    تم و ظاهر اختصاصی حساب «{userName}»
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    تغییر خودکار بر اساس تم گوشی یا انتخاب دستی به همراه ۱۰ تم رنگی متنوع
+                    تم رنگی و حالت تاریک/روشن فقط برای حساب کاربری شما ذخیره می‌شود
                   </p>
+                </div>
+              </div>
+
+              {/* 3-Way Display Mode Switcher with Vector Icons */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                  حالت زمینه برنامه:
+                </label>
+                <div className="grid grid-cols-3 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800">
+                  {(
+                    [
+                      { id: 'system', label: 'خودکار با گوشی', Icon: Smartphone },
+                      { id: 'light', label: 'حالت روشن', Icon: Sun },
+                      { id: 'dark', label: 'دارک مود', Icon: Moon },
+                    ] as { id: ThemeMode; label: string; Icon: React.ElementType }[]
+                  ).map((m) => {
+                    const currentMode: ThemeMode =
+                      settings.themeMode || (settings.darkMode ? 'dark' : 'light');
+                    const isActive = currentMode === m.id;
+                    const ModeIcon = m.Icon;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          if (m.id === 'system') {
+                            const prefersDark =
+                              window.matchMedia &&
+                              window.matchMedia('(prefers-color-scheme: dark)').matches;
+                            onUpdateSettings({
+                              themeMode: 'system',
+                              darkMode: prefersDark,
+                            });
+                          } else {
+                            onUpdateSettings({
+                              themeMode: m.id,
+                              darkMode: m.id === 'dark',
+                            });
+                          }
+                        }}
+                        className={`py-2.5 px-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                          isActive
+                            ? 'theme-bg text-white shadow-xs'
+                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <ModeIcon size={14} strokeWidth={2.3} />
+                        <span>{m.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 10 Color Themes */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2.5">
+                  انتخاب تم رنگی ({toPersianDigits(COLOR_THEMES.length)} تم):
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-2 gap-2.5">
+                  {COLOR_THEMES.map((theme) => {
+                    const isSelected = settings.colorTheme === theme.id;
+                    return (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => onUpdateSettings({ colorTheme: theme.id })}
+                        className={`flex items-center gap-2.5 p-3 rounded-2xl border text-right transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-slate-900 dark:border-white bg-slate-900/5 dark:bg-white/15 shadow-xs'
+                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                        }`}
+                      >
+                        <span
+                          className="w-6 h-6 rounded-full shrink-0 shadow-inner flex items-center justify-center text-white border border-white/25"
+                          style={{
+                            background:
+                              theme.id === 'monochrome'
+                                ? 'linear-gradient(135deg, #71717a 0%, #18181b 100%)'
+                                : theme.hex,
+                          }}
+                        >
+                          {isSelected && <Check size={13} strokeWidth={2.8} />}
+                        </span>
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {theme.name}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
-            {/* 3-Way Display Mode Switcher: Light / Dark / Auto (Phone System) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                حالت زمینه برنامه:
-              </label>
-              <div className="grid grid-cols-3 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800">
-                {(
-                  [
-                    { id: 'system', label: 'خودکار با گوشی 📱' },
-                    { id: 'light', label: 'حالت روشن ☀️' },
-                    { id: 'dark', label: 'دارک مود 🌙' },
-                  ] as { id: ThemeMode; label: string }[]
-                ).map((m) => {
-                  const currentMode: ThemeMode =
-                    settings.themeMode || (settings.darkMode ? 'dark' : 'light');
-                  const isActive = currentMode === m.id;
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => {
-                        if (m.id === 'system') {
-                          const prefersDark =
-                            window.matchMedia &&
-                            window.matchMedia('(prefers-color-scheme: dark)').matches;
-                          onUpdateSettings({
-                            themeMode: 'system',
-                            darkMode: prefersDark,
-                          });
-                        } else {
-                          onUpdateSettings({
-                            themeMode: m.id,
-                            darkMode: m.id === 'dark',
-                          });
-                        }
-                      }}
-                      className={`py-2.5 px-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
-                        isActive
-                          ? 'theme-bg text-white shadow-xs'
-                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            {/* Right Column: User Name, Personal Budget, PIN Lock & Reset Account Data */}
+            <div className="space-y-5">
+              <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <CircularIcon name="lock" size="md" color="#10b981" />
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                      مشخصات، بودجه کل و رمز ورود حساب «{userName}»
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      با گذاشتن رمز ۴ رقمی، هیچ‌کس بدون رمز نمی‌تواند وارد حساب شما شود
+                    </p>
+                  </div>
+                </div>
 
-            {/* 10 Color Themes (Never grayscale so user can always see the real theme colors!) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2.5">
-                انتخاب تم رنگی دلخواه ({toPersianDigits(COLOR_THEMES.length)} تم):
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-2 gap-2.5">
-                {COLOR_THEMES.map((theme) => {
-                  const isSelected = settings.colorTheme === theme.id;
-                  return (
-                    <button
-                      key={theme.id}
-                      type="button"
-                      onClick={() => onUpdateSettings({ colorTheme: theme.id })}
-                      className={`flex items-center gap-2.5 p-3 rounded-2xl border text-right transition-all cursor-pointer ${
-                        isSelected
-                          ? 'border-slate-900 dark:border-white bg-slate-900/5 dark:bg-white/15 shadow-xs'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
-                      }`}
-                    >
-                      <span
-                        className="w-6 h-6 rounded-full shrink-0 shadow-inner flex items-center justify-center text-white text-xs border border-white/25"
-                        style={{
-                          background:
-                            theme.id === 'monochrome'
-                              ? 'linear-gradient(135deg, #71717a 0%, #18181b 100%)'
-                              : theme.hex,
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                      نام نمایشی حساب کاربری
+                    </label>
+                    <input
+                      type="text"
+                      value={userName}
+                      onChange={(e) =>
+                        onUpdateSettings({
+                          userName: e.target.value,
+                          hootanName: e.target.value,
+                        })
+                      }
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                      سقف بودجه ماهانه ({settings.currencyUnit})
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={formatMoney(settings.monthlyTotalBudget)}
+                      onChange={(e) => {
+                        const num = parseInt(
+                          toEnglishDigits(e.target.value).replace(/\D/g, '') || '0',
+                          10
+                        );
+                        onUpdateSettings({ monthlyTotalBudget: num });
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                    رمز ۴ رقمی ورود به حساب {userName}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      dir="ltr"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="مثلاً: 1375 (خالی = بدون رمز)"
+                      value={pinDraft}
+                      onChange={(e) =>
+                        setPinDraft(
+                          toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4)
+                        )
+                      }
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-sans tabular-nums font-bold text-center text-slate-900 dark:text-white"
+                    />
+                    {settings.pinCode && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPinDraft('');
+                          onUpdateSettings({ pinCode: '' });
+                          setPinSavedToast(`قفل رمز ۴ رقمی برای حساب ${userName} حذف شد.`);
+                          setTimeout(() => setPinSavedToast(''), 3500);
                         }}
+                        className="px-3 py-2.5 rounded-xl bg-rose-500/10 text-rose-500 text-xs font-extrabold cursor-pointer shrink-0"
                       >
-                        {isSelected ? '✓' : ''}
-                      </span>
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                        {theme.name}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+                        حذف رمز
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-          {/* Couple Names, Total Budget, Currency & Privacy PIN */}
-          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-4 h-fit">
-            <div className="flex items-center gap-3">
-              <CircularIcon name="users" size="md" color="#0ea5e9" />
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                  مشخصات زوجین، بودجه کل و قفل خصوصی
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  ویرایش نام‌ها، سقف بودجه ماهانه کل و رمز ورود اختصاصی
-                </p>
-              </div>
-            </div>
+                <div className="pt-1 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cleanPin = toEnglishDigits(pinDraft)
+                        .replace(/\D/g, '')
+                        .slice(0, 4);
+                      if (cleanPin.length > 0 && cleanPin.length < 4) {
+                        setPinSavedToast('رمز ورود باید دقیقاً ۴ رقم باشد.');
+                        setTimeout(() => setPinSavedToast(''), 3500);
+                        return;
+                      }
+                      onUpdateSettings({ pinCode: cleanPin });
+                      setPinSavedToast(
+                        cleanPin
+                          ? `رمز ۴ رقمی (${toPersianDigits(
+                              cleanPin
+                            )}) برای حساب ${userName} ذخیره شد`
+                          : `تنظیمات بدون رمز برای حساب ${userName} ذخیره شد`
+                      );
+                      setTimeout(() => setPinSavedToast(''), 4000);
+                    }}
+                    className="flex-1 py-2.5 px-4 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+                  >
+                    <Check size={14} strokeWidth={2.5} />
+                    <span>ذخیره رمز و تنظیمات حساب</span>
+                  </button>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                  نام نفر اول (من)
-                </label>
-                <input
-                  type="text"
-                  value={settings.hootanName}
-                  onChange={(e) => onUpdateSettings({ hootanName: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                  نام همسر
-                </label>
-                <input
-                  type="text"
-                  value={settings.fatemehName}
-                  onChange={(e) => onUpdateSettings({ fatemehName: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                  عنوان خرج مشترک
-                </label>
-                <input
-                  type="text"
-                  value={settings.sharedLabel}
-                  onChange={(e) => onUpdateSettings({ sharedLabel: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                  سقف بودجه کل ماهانه ({settings.currencyUnit})
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={formatMoney(settings.monthlyTotalBudget)}
-                  onChange={(e) => {
-                    const num = parseInt(
-                      toEnglishDigits(e.target.value).replace(/\D/g, '') || '0',
-                      10
-                    );
-                    onUpdateSettings({ monthlyTotalBudget: num });
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                  رمز ۴ رقمی ورود به برنامه
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    dir="ltr"
-                    inputMode="numeric"
-                    maxLength={4}
-                    placeholder="مثلاً: 1375"
-                    value={pinDraft}
-                    onChange={(e) =>
-                      setPinDraft(
-                        toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4)
-                      )
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-center text-slate-900 dark:text-white"
-                  />
-                  {settings.pinCode && (
+                  {settings.pinCode && onLockAppNow && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setPinDraft('');
-                        onUpdateSettings({ pinCode: '' });
-                        setPinSavedToast('قفل رمز ۴ رقمی غیرفعال شد.');
-                        setTimeout(() => setPinSavedToast(''), 3500);
-                      }}
-                      className="px-2.5 py-2.5 rounded-xl bg-rose-500/10 text-rose-500 text-[11px] font-extrabold cursor-pointer shrink-0"
+                      onClick={onLockAppNow}
+                      className="py-2.5 px-3.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
                     >
-                      حذف رمز
+                      <Lock size={13} strokeWidth={2.4} />
+                      <span>قفل کردن حساب الان</span>
                     </button>
+                  )}
+                </div>
+
+                {pinSavedToast && (
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold text-center">
+                    {pinSavedToast}
+                  </div>
+                )}
+              </div>
+
+              {/* Clean Reset / Wipe Current User Data Card */}
+              <div className="rounded-3xl bg-white dark:bg-slate-900 border border-rose-500/30 p-5 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                      پاک‌سازی کامل داده‌های حساب «{userName}» (شروع از صفر)
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      حذف تمام تراکنش‌ها، یادآورها و کارت‌های قبلی این کاربر برای شروع کاملاً تمیز
+                    </p>
+                  </div>
+
+                  {!confirmClearData ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmClearData(true)}
+                      className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-extrabold cursor-pointer shrink-0"
+                    >
+                      پاک‌سازی اطلاعات حساب
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClearCurrentUserData();
+                          setConfirmClearData(false);
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-extrabold cursor-pointer"
+                      >
+                        بله، کامل پاک شود
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmClearData(false)}
+                        className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+                      >
+                        انصراف
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
             </div>
-
-            {/* Explicit Save PIN & Lock Action Buttons */}
-            <div className="pt-2 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const cleanPin = toEnglishDigits(pinDraft).replace(/\D/g, '').slice(0, 4);
-                  if (cleanPin.length > 0 && cleanPin.length < 4) {
-                    setPinSavedToast('رمز ورود باید دقیقاً ۴ رقم باشد.');
-                    setTimeout(() => setPinSavedToast(''), 3500);
-                    return;
-                  }
-                  onUpdateSettings({ pinCode: cleanPin });
-                  setPinSavedToast(
-                    cleanPin
-                      ? `رمز ۴ رقمی (${toPersianDigits(cleanPin)}) با موفقیت ذخیره شد ✓`
-                      : 'تنظیمات بدون رمز ورود ذخیره شد ✓'
-                  );
-                  setTimeout(() => setPinSavedToast(''), 4000);
-                }}
-                className="flex-1 py-2.5 px-4 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-xs"
-              >
-                ذخیره رمز و مشخصات ✓
-              </button>
-
-              {settings.pinCode && onLockAppNow && (
-                <button
-                  type="button"
-                  onClick={onLockAppNow}
-                  className="py-2.5 px-3.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer whitespace-nowrap"
-                >
-                  قفل کردن برنامه الان 🔒
-                </button>
-              )}
-            </div>
-
-            {pinSavedToast && (
-              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold text-center">
-                {pinSavedToast}
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -630,7 +846,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   تنظیم سقف بودجه ماهانه برای هر دسته‌بندی هزینه
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  مقادیر تعیین شده در این بخش مستقیماً در صفحه «آمارها» با نمودار پیشرفت (Progress Bar) مقایسه می‌شوند
+                  مقادیر تعیین شده در این بخش مستقیماً در صفحه «آمارها» با نمودار پیشرفت مقایسه می‌شوند
                 </p>
               </div>
             </div>
@@ -701,7 +917,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* SECTION 3: EDIT CATEGORIES & SUBCATEGORIES */}
       {activeSection === 'categories' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          {/* Form to Add / Edit Category */}
           <form
             onSubmit={handleSaveCategoryForm}
             className="lg:col-span-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 space-y-4"
@@ -763,7 +978,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       catColor === hex ? 'ring-2 ring-offset-2 ring-slate-900 dark:ring-white' : ''
                     }`}
                   >
-                    {catColor === hex ? '✓' : ''}
+                    {catColor === hex && <Check size={13} strokeWidth={2.8} />}
                   </button>
                 ))}
               </div>
@@ -797,9 +1012,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="flex gap-2">
               <button
                 type="submit"
-                className="flex-1 py-2.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1"
               >
-                {editingCat ? 'بروزرسانی دسته‌بندی' : '+ افزودن دسته‌بندی'}
+                {editingCat ? (
+                  <>
+                    <Check size={14} />
+                    <span>بروزرسانی دسته‌بندی</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus size={14} />
+                    <span>افزودن دسته‌بندی</span>
+                  </>
+                )}
               </button>
               {editingCat && (
                 <button
@@ -843,7 +1068,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       onClick={() => startEditCategory(cat)}
                       className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
                     >
-                      ویرایش
+                      ویرایش دسته
                     </button>
                     {categories.length > 2 && (
                       <button
@@ -857,16 +1082,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Editable Subcategories */}
+                {/* Subcategories List & Inline Rename/Add */}
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                  <span className="text-[11px] font-bold text-slate-500 block">
-                    زیردسته‌ها (برای ویرایش نام، مستقیم تایپ کنید):
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {cat.subCategories.map((sub) => (
                       <div
                         key={sub.id}
-                        className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-2.5 py-1.5 border border-slate-200/60 dark:border-slate-700"
+                        className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700 rounded-xl px-2.5 py-1"
                       >
                         <input
                           type="text"
@@ -874,23 +1096,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           onChange={(e) =>
                             handleRenameSubCategory(cat, sub.id, e.target.value)
                           }
-                          className="flex-1 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none"
+                          className="text-xs font-semibold bg-transparent text-slate-800 dark:text-slate-200 w-24 focus:outline-none"
                         />
                         {cat.subCategories.length > 1 && (
                           <button
                             type="button"
                             onClick={() => handleDeleteSubCategory(cat, sub.id)}
-                            className="text-rose-500 text-xs font-bold px-1 cursor-pointer"
+                            className="text-rose-500 text-xs font-bold cursor-pointer flex items-center"
                             title="حذف زیردسته"
                           >
-                            ×
+                            <X size={12} />
                           </button>
                         )}
                       </div>
                     ))}
                   </div>
 
-                  {/* Quick Add Subcategory */}
                   <div className="flex items-center gap-2 pt-1">
                     <input
                       type="text"
@@ -906,9 +1127,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => handleAddSubCategory(cat)}
-                      className="px-3 py-1.5 rounded-xl theme-bg text-white text-xs font-bold cursor-pointer"
+                      className="px-3 py-1.5 rounded-xl theme-bg text-white text-xs font-bold cursor-pointer flex items-center gap-1"
                     >
-                      + ثبت زیردسته
+                      <Plus size={13} />
+                      <span>ثبت زیردسته</span>
                     </button>
                   </div>
                 </div>
@@ -956,7 +1178,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       tagColor === hex ? 'ring-2 ring-offset-2 ring-slate-900 dark:ring-white' : ''
                     }`}
                   >
-                    {tagColor === hex ? '✓' : ''}
+                    {tagColor === hex && <Check size={13} strokeWidth={2.8} />}
                   </button>
                 ))}
               </div>
@@ -964,9 +1186,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
             <button
               type="submit"
-              className="w-full py-2.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer"
+              className="w-full py-2.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1"
             >
-              {editingTag ? 'ذخیره تغییرات تگ' : '+ افزودن تگ'}
+              {editingTag ? (
+                <>
+                  <Check size={14} />
+                  <span>ذخیره تغییرات تگ</span>
+                </>
+              ) : (
+                <>
+                  <Plus size={14} />
+                  <span>افزودن تگ</span>
+                </>
+              )}
             </button>
           </form>
 
@@ -1013,20 +1245,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       )}
 
-      {/* SECTION 5: ZERO-TOKEN AUTO SYNC & GITHUB BACKUP */}
+      {/* SECTION 5: ISOLATED PER-USER GITHUB BACKUP & FILE EXPORT */}
       {activeSection === 'backup' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Zero-Token Automatic Sync Card */}
+          {/* Per-User Isolated GitHub Sync Card */}
           <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-3">
                 <CircularIcon name="refresh" size="md" color="#10b981" />
                 <div>
                   <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                    همگام‌سازی خودکار دوطرفه روی گیت‌هاب (GitHub Pages)
+                    پشتیبان‌گیری ابری اختصاصی حساب «{userName}» روی گیت‌هاب
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    توکن را فقط یک‌بار در گوشی خودتان ذخیره کنید؛ گوشی {settings.fatemehName} خودکار وصل می‌شود
+                    ذخیره در فایل مجزای <code dir="ltr">{defaultUserFilePath}</code> (جدا از سایر کاربران)
                   </p>
                 </div>
               </div>
@@ -1035,16 +1267,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 type="button"
                 onClick={async () => {
                   await onManualSyncNow();
-                  setGhSavedToast('همگام‌سازی با گیت‌هاب انجام شد ✓');
+                  setGhSavedToast('پشتیبان‌گیری حساب شما در گیت‌هاب انجام شد');
                   setTimeout(() => setGhSavedToast(''), 3500);
                 }}
-                className="px-3.5 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer whitespace-nowrap shrink-0"
+                className="px-3.5 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5"
               >
-                {syncStatus === 'syncing' ? 'در حال سینک...' : 'همگام‌سازی الان ↻'}
+                <RefreshCw
+                  size={13}
+                  className={syncStatus === 'syncing' ? 'animate-spin' : ''}
+                />
+                <span>{syncStatus === 'syncing' ? 'در حال سینک...' : 'سینک الان'}</span>
               </button>
             </div>
 
-            {/* Direct GitHub Connection Form (Always Visible with Save Button) */}
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
@@ -1054,12 +1289,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <input
                     type="text"
                     dir="ltr"
-                    placeholder={detectGitHubPagesRepo().repoOwner || 'hootan'}
+                    placeholder={detectGitHubPagesRepo().repoOwner || 'baraary'}
                     value={settings.githubSync?.repoOwner || ''}
                     onChange={(e) =>
                       handleGitHubSyncField({ repoOwner: e.target.value.trim() })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-sans text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
@@ -1074,14 +1309,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onChange={(e) =>
                       handleGitHubSyncField({ repoName: e.target.value.trim() })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-sans text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                  توکن دسترسی گیت‌هاب (Personal Access Token با دسترسی repo)
+                  توکن دسترسی گیت‌هاب (Personal Access Token)
                 </label>
                 <input
                   type="password"
@@ -1091,14 +1326,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   onChange={(e) =>
                     handleGitHubSyncField({ token: e.target.value.trim() })
                   }
-                  className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-sans text-slate-900 dark:text-white"
                 />
-                <span className="text-[10px] text-slate-400 mt-1 block">
-                  نکته: این توکن به صورت رمزنگاری‌شده (`syncVault`) در فایل دیتابیس گیت‌هاب ذخیره می‌شود تا گیت‌هاب آن را باطل نکند و گوشی {settings.fatemehName} هم به صورت خودکار و بدون نیاز به وارد کردن توکن به آن متصل شود!
-                </span>
               </div>
 
-              {/* Save & Connect Button + Partner Magic Link Button */}
               <div className="flex flex-col sm:flex-row gap-2 pt-1">
                 <button
                   type="button"
@@ -1110,17 +1341,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       enabled: true,
                       repoOwner: owner,
                       repoName: repo,
+                      filePath: defaultUserFilePath,
                     });
-                    setGhSavedToast('در حال ذخیره و ارسال دیتابیس به گیت‌هاب...');
+                    setGhSavedToast('در حال ذخیره فایل اختصاصی شما در گیت‌هاب...');
                     await onManualSyncNow();
                     setGhSavedToast(
-                      'تنظیمات ذخیره شد و دیتابیس با گیت‌هاب همگام‌سازی گردید ✓'
+                      `فایل اختصاصی حساب ${userName} با گیت‌هاب همگام‌سازی شد`
                     );
                     setTimeout(() => setGhSavedToast(''), 5000);
                   }}
-                  className="flex-1 py-2.5 px-4 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-sm"
+                  className="flex-1 py-2.5 px-4 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
                 >
-                  ذخیره توکن و اتصال به گیت‌هاب ✓
+                  <Check size={14} strokeWidth={2.5} />
+                  <span>ذخیره و سینک فایل اختصاصی {userName}</span>
                 </button>
 
                 {settings.githubSync?.token && (
@@ -1133,18 +1366,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         repoOwner: settings.githubSync?.repoOwner || auto.repoOwner,
                         repoName: settings.githubSync?.repoName || auto.repoName,
                         branch: settings.githubSync?.branch || 'main',
-                        filePath: settings.githubSync?.filePath || 'data/hamhesab-db.json',
+                        filePath: defaultUserFilePath,
                         token: settings.githubSync?.token || '',
                       });
                       navigator.clipboard?.writeText(link);
                       setMagicLinkCopied(true);
                       setTimeout(() => setMagicLinkCopied(false), 4000);
                     }}
-                    className="py-2.5 px-3.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer whitespace-nowrap"
+                    className="py-2.5 px-3.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
                   >
-                    {magicLinkCopied
-                      ? 'لینک اختصاصی فاطمه کپی شد ✓'
-                      : `کپی لینک ورود خودکار برای ${settings.fatemehName} 🔗`}
+                    {magicLinkCopied ? (
+                      <>
+                        <Check size={14} strokeWidth={2.5} />
+                        <span>لینک اتصال کپی شد</span>
+                      </>
+                    ) : (
+                      <>
+                        <Link2 size={14} strokeWidth={2.3} />
+                        <span>کپی لینک اتصال سریع</span>
+                      </>
+                    )}
                   </button>
                 )}
               </div>
@@ -1161,21 +1402,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
               )}
             </div>
-
-            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/70 text-xs text-slate-600 dark:text-slate-300 space-y-1.5 leading-relaxed">
-              <p className="font-bold text-slate-900 dark:text-white">
-                آیا لازم است توکن را در گوشی {settings.fatemehName} هم وارد کنم؟ خیر!
-              </p>
-              <p>
-                ۱. کافی است فقط **یک‌بار** توکن گیت‌هاب را در کادر بالا وارد کرده و دکمه **«ذخیره توکن و اتصال به گیت‌هاب ✓»** را بزنید.
-              </p>
-              <p>
-                ۲. برنامه توکن را به صورت رمزنگاری‌شده (`syncVault`) در فایل دیتابیس ریپازیتوری شما ذخیره می‌کند. وقتی {settings.fatemehName} آدرس سایت گیت‌هاب شما را باز کند، گوشی او به صورت خودکار کلید رمزنگاری‌شده را دریافت کرده و بدون نیاز به تایپ هیچ توکنی، دوطرفه سینک می‌شود!
-              </p>
-              <p>
-                ۳. همچنین دکمه **«کپی لینک ورود خودکار برای {settings.fatemehName} 🔗»** در بالا قرار داده شده که اگر ریپازیتوری شما Private است، با فرستادن آن لینک در تلگرام/واتساپ برای {settings.fatemehName}، با یک کلیک گوشی او هم متصل می‌شود.
-              </p>
-            </div>
           </div>
 
           {/* Manual File Export / Import & APK / PWA Installation Card */}
@@ -1190,10 +1416,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <CircularIcon name="download" size="md" color="#0ea5e9" />
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                  خروجی فایل پشتیبان و گزارش موبایل
+                  خروجی فایل پشتیبان حساب «{userName}»
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  دانلود فایل دیتابیس JSON یا گزارش تک‌صفحه‌ای HTML
+                  دانلود فایل دیتابیس JSON یا گزارش تک‌صفحه‌ای HTML اختصاصی این کاربر
                 </p>
               </div>
             </div>
@@ -1210,13 +1436,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 onClick={handleExportJSON}
                 className="w-full py-3 px-4 rounded-2xl theme-gradient text-white text-xs font-extrabold flex items-center justify-between shadow-md cursor-pointer"
               >
-                <span>دانلود فایل پشتیبان کامل (JSON)</span>
-                <span>⬇</span>
+                <span>دانلود فایل پشتیبان JSON ({userName})</span>
+                <Download size={15} strokeWidth={2.4} />
               </button>
 
               <label className="w-full py-3 px-4 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-extrabold flex items-center justify-between cursor-pointer transition-colors">
-                <span>بارگذاری فایل پشتیبان (JSON)</span>
-                <span>⬆</span>
+                <span>بارگذاری فایل پشتیبان JSON در این حساب</span>
+                <Upload size={15} strokeWidth={2.4} />
                 <input
                   type="file"
                   accept=".json"
@@ -1231,20 +1457,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="w-full py-3 px-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs font-extrabold flex items-center justify-between cursor-pointer"
               >
                 <span>دانلود فایل گزارش تک‌صفحه‌ای HTML</span>
-                <span>📄</span>
-              </button>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <span className="text-[11px] text-slate-400">
-                بازگردانی داده‌های نمونه اولیه:
-              </span>
-              <button
-                type="button"
-                onClick={onResetDefaults}
-                className="text-xs text-rose-500 hover:underline font-bold cursor-pointer"
-              >
-                بازنشانی اطلاعات پیش‌فرض
+                <FileText size={15} strokeWidth={2.4} />
               </button>
             </div>
           </div>

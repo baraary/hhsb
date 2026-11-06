@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Download, X } from 'lucide-react';
 import { AppState, Transaction } from '../types';
 import {
   formatMoney,
@@ -59,7 +60,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
     if (selectedMonth !== 'all' && getMonthKey(tx.jalaliDate) !== selectedMonth) return false;
     if (selectedTagId !== 'all' && !tx.tags.includes(selectedTagId)) return false;
 
-    // Smart Search by Title / Note / Category / Subcategory
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       const cat = categories.find((c) => c.id === tx.categoryId);
@@ -71,11 +71,8 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
       if (!matchTitle && !matchNote && !matchCat && !matchSub) return false;
     }
 
-    // Smart Filter by Amount Range
     if (minAmount > 0 && tx.amount < minAmount) return false;
     if (maxAmount > 0 && tx.amount > maxAmount) return false;
-
-    // Smart Filter by Jalali Date Range (YYYY/MM/DD string comparison)
     if (cleanFromDate && tx.jalaliDate < cleanFromDate) return false;
     if (cleanToDate && tx.jalaliDate > cleanToDate) return false;
 
@@ -89,7 +86,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
       .sort((a, b) => b.jalaliDate.localeCompare(a.jalaliDate));
     const total = items.reduce((s, t) => s + t.amount, 0);
 
-    // Subcategory counts
     const subBreakdown = cat.subCategories
       .map((sub) => {
         const subItems = items.filter((i) => i.subCategoryId === sub.id);
@@ -116,8 +112,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
       'مبلغ',
       'دسته‌بندی',
       'زیردسته',
-      'خرج توسط',
-      'ثبت توسط',
       'کارت بانکی',
       'تاریخ شمسی',
       'ساعت',
@@ -127,21 +121,12 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
       const cat = categories.find((c) => c.id === tx.categoryId);
       const sub = cat?.subCategories.find((s) => s.id === tx.subCategoryId);
       const card = cards.find((c) => c.id === tx.cardId);
-      const spent =
-        tx.spentBy === 'hootan'
-          ? settings.hootanName
-          : tx.spentBy === 'fatemeh'
-          ? settings.fatemehName
-          : settings.sharedLabel;
-      const rec = tx.recordedBy === 'hootan' ? settings.hootanName : settings.fatemehName;
       return [
         `"${tx.title}"`,
         tx.type === 'expense' ? 'هزینه' : 'درآمد',
         tx.amount,
         `"${cat?.name || ''}"`,
         `"${sub?.name || ''}"`,
-        `"${spent}"`,
-        `"${rec}"`,
         `"${card?.title || ''}"`,
         tx.jalaliDate,
         tx.time,
@@ -180,11 +165,12 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
           onClick={handleExportCSV}
           className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-extrabold cursor-pointer self-start sm:self-auto whitespace-nowrap"
         >
+          <Download size={14} strokeWidth={2.3} />
           <span>خروجی اکسل (CSV)</span>
         </button>
       </div>
 
-      {/* SMART SEARCH BAR (عنوان، مبلغ، بازه تاریخی) */}
+      {/* SMART SEARCH BAR */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 space-y-3.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -201,15 +187,15 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
             <button
               type="button"
               onClick={clearSmartFilters}
-              className="text-xs font-bold text-rose-500 hover:underline cursor-pointer"
+              className="text-xs font-bold text-rose-500 hover:underline flex items-center gap-1 cursor-pointer"
             >
-              پاک کردن فیلترها ×
+              <span>پاک کردن فیلترها</span>
+              <X size={13} />
             </button>
           )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
-          {/* Title / Keyword Input */}
           <div className="lg:col-span-4">
             <label className="block text-[10px] font-bold text-slate-400 mb-1">
               جستجوی عنوان، دسته‌بندی یا یادداشت
@@ -223,7 +209,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
             />
           </div>
 
-          {/* Min Amount */}
           <div className="lg:col-span-2">
             <label className="block text-[10px] font-bold text-slate-400 mb-1">
               حداقل مبلغ ({settings.currencyUnit})
@@ -240,7 +225,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
             />
           </div>
 
-          {/* Max Amount */}
           <div className="lg:col-span-2">
             <label className="block text-[10px] font-bold text-slate-400 mb-1">
               حداکثر مبلغ ({settings.currencyUnit})
@@ -257,7 +241,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
             />
           </div>
 
-          {/* From Jalali Date */}
           <div className="lg:col-span-2">
             <label className="block text-[10px] font-bold text-slate-400 mb-1">
               از تاریخ شمسی
@@ -270,7 +253,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
             />
           </div>
 
-          {/* To Jalali Date */}
           <div className="lg:col-span-2">
             <label className="block text-[10px] font-bold text-slate-400 mb-1">
               تا تاریخ شمسی
@@ -285,13 +267,22 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
         </div>
       </div>
 
-      {/* Month & Tag Filter Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 overflow-x-auto">
+      {/* Month & Tag Filter Strip (Isolated from Page Tab Swipe!) */}
+      <div
+        data-no-swipe="true"
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+      >
+        <div
+          data-no-swipe="true"
+          className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 overflow-x-auto max-w-full touch-pan-x"
+        >
           <button
             type="button"
             onClick={() => setSelectedMonth('all')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer whitespace-nowrap ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer whitespace-nowrap shrink-0 ${
               selectedMonth === 'all'
                 ? 'theme-bg text-white'
                 : 'text-slate-600 dark:text-slate-400'
@@ -304,7 +295,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
               key={m}
               type="button"
               onClick={() => setSelectedMonth(m)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer whitespace-nowrap ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer whitespace-nowrap shrink-0 ${
                 selectedMonth === m
                   ? 'theme-bg text-white'
                   : 'text-slate-600 dark:text-slate-400'
@@ -315,12 +306,15 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
           ))}
         </div>
 
-        {/* Tag Filter */}
-        <div className="flex items-center gap-1.5 overflow-x-auto">
+        {/* Tag Filter Horizontal Scroller (Isolated from Page Tab Swipe) */}
+        <div
+          data-no-swipe="true"
+          className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0 touch-pan-x"
+        >
           <button
             type="button"
             onClick={() => setSelectedTagId('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer whitespace-nowrap shrink-0 ${
               selectedTagId === 'all'
                 ? 'border-slate-900 dark:border-white bg-slate-900 text-white dark:bg-white dark:text-slate-900'
                 : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
@@ -333,7 +327,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
               key={tag.id}
               type="button"
               onClick={() => setSelectedTagId(tag.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer whitespace-nowrap shrink-0 ${
                 selectedTagId === tag.id
                   ? 'text-white border-transparent'
                   : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
@@ -372,12 +366,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
               {monthFiltered.map((tx) => {
                 const cat = categories.find((c) => c.id === tx.categoryId);
                 const sub = cat?.subCategories.find((s) => s.id === tx.subCategoryId);
-                const spentByLabel =
-                  tx.spentBy === 'hootan'
-                    ? settings.hootanName
-                    : tx.spentBy === 'fatemeh'
-                    ? settings.fatemehName
-                    : settings.sharedLabel;
+                const card = cards.find((c) => c.id === tx.cardId);
                 return (
                   <div
                     key={tx.id}
@@ -395,7 +384,8 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
                           {tx.title}
                         </h4>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
-                          {cat?.name} · {sub?.name} · {spentByLabel} ·{' '}
+                          {cat?.name} · {sub?.name}
+                          {card ? ` · ${card.title}` : ''} ·{' '}
                           {formatJalaliReadable(tx.jalaliDate)}
                         </div>
                       </div>
@@ -467,7 +457,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
                   </div>
                 </div>
 
-                {/* Subcategory preview lines */}
                 {folder.subBreakdown.length > 0 ? (
                   <div className="mt-4 space-y-1.5">
                     {folder.subBreakdown.slice(0, 3).map((s) => (
@@ -479,7 +468,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
                             : 'text-slate-600 dark:text-slate-400'
                         }`}
                       >
-                        <span>• {s.sub.name}</span>
+                        <span>{s.sub.name}</span>
                         <span className="tabular-nums font-semibold">
                           {formatMoney(s.total)}
                         </span>
@@ -553,9 +542,10 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
             <button
               type="button"
               onClick={() => setSelectedCategoryId(null)}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1 cursor-pointer"
             >
-              بستن پوشه
+              <X size={14} />
+              <span>بستن پوشه</span>
             </button>
           </div>
 
@@ -571,14 +561,6 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
                 );
                 const card = cards.find((c) => c.id === tx.cardId);
                 const bank = card ? IRANIAN_BANKS[card.bankId] : null;
-                const spentByLabel =
-                  tx.spentBy === 'hootan'
-                    ? settings.hootanName
-                    : tx.spentBy === 'fatemeh'
-                    ? settings.fatemehName
-                    : settings.sharedLabel;
-                const recordedByLabel =
-                  tx.recordedBy === 'hootan' ? settings.hootanName : settings.fatemehName;
 
                 return (
                   <div
@@ -598,14 +580,12 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
                         </h4>
                         <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                           <span>{sub?.name || 'عمومی'}</span>
-                          <span>·</span>
-                          <span>خرج: {spentByLabel}</span>
-                          <span>·</span>
-                          <span>ثبت: {recordedByLabel}</span>
-                          {bank && (
+                          {card && (
                             <>
                               <span>·</span>
-                              <span>{bank.name}</span>
+                              <span>
+                                {card.title} {bank ? `(${bank.name})` : ''}
+                              </span>
                             </>
                           )}
                           <span>·</span>

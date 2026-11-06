@@ -144,7 +144,7 @@ public class MainActivity extends Activity {
                 );
                 if (cursor != null) {
                     int count = 0;
-                    int maxScan = Math.max(limit * 4, 120);
+                    int maxScan = Math.max(limit * 6, 800);
                     int scanned = 0;
                     while (cursor.moveToNext() && count < limit && scanned < maxScan) {
                         scanned++;

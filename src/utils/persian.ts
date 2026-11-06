@@ -149,3 +149,119 @@ export function advanceJalaliDate(
   return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
 }
 
+/**
+ * Steps a Jalali date string (YYYY/MM/DD) backwards by one recurrence period
+ */
+export function rewindJalaliDate(
+  jalaliDate: string,
+  recurrence: 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+): string {
+  const clean = toEnglishDigits(jalaliDate || '').trim();
+  const parts = clean.split('/').map((n) => parseInt(n, 10));
+  if (parts.length !== 3 || parts.some(isNaN)) {
+    return getCurrentJalaliDateStr();
+  }
+  let [year, month, day] = parts;
+
+  if (recurrence === 'weekly') {
+    day -= 7;
+    while (day < 1) {
+      month -= 1;
+      if (month < 1) {
+        month = 12;
+        year -= 1;
+      }
+      day += getJalaliMonthLength(year, month);
+    }
+  } else if (recurrence === 'monthly') {
+    month -= 1;
+    if (month < 1) {
+      month = 12;
+      year -= 1;
+    }
+    const maxDay = getJalaliMonthLength(year, month);
+    if (day > maxDay) day = maxDay;
+  } else if (recurrence === 'quarterly') {
+    month -= 3;
+    while (month < 1) {
+      month += 12;
+      year -= 1;
+    }
+    const maxDay = getJalaliMonthLength(year, month);
+    if (day > maxDay) day = maxDay;
+  } else if (recurrence === 'yearly') {
+    year -= 1;
+    const maxDay = getJalaliMonthLength(year, month);
+    if (day > maxDay) day = maxDay;
+  }
+
+  return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+}
+
+export function formatDateToJalaliStr(date: Date): string {
+  try {
+    const parts = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    const y = parts.find((p) => p.type === 'year')?.value || '1403';
+    const m = parts.find((p) => p.type === 'month')?.value || '08';
+    const d = parts.find((p) => p.type === 'day')?.value || '15';
+    return `${y}/${m.padStart(2, '0')}/${d.padStart(2, '0')}`;
+  } catch {
+    return getCurrentJalaliDateStr();
+  }
+}
+
+export function formatTimeFromDate(date: Date): string {
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+/**
+ * Shifts a Jalali date string (YYYY/MM/DD) by deltaDays (positive or negative)
+ */
+export function shiftJalaliDateByDays(jalaliDate: string, deltaDays: number): string {
+  const clean = toEnglishDigits(jalaliDate || '').trim();
+  const parts = clean.split('/').map((n) => parseInt(n, 10));
+  if (parts.length !== 3 || parts.some(isNaN)) {
+    return getCurrentJalaliDateStr();
+  }
+  let [year, month, day] = parts;
+  let remaining = Math.trunc(deltaDays);
+
+  while (remaining > 0) {
+    const maxDay = getJalaliMonthLength(year, month);
+    if (day + remaining <= maxDay) {
+      day += remaining;
+      remaining = 0;
+    } else {
+      remaining -= maxDay - day + 1;
+      day = 1;
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+    }
+  }
+
+  while (remaining < 0) {
+    if (day + remaining >= 1) {
+      day += remaining;
+      remaining = 0;
+    } else {
+      remaining += day;
+      month -= 1;
+      if (month < 1) {
+        month = 12;
+        year -= 1;
+      }
+      day = getJalaliMonthLength(year, month);
+    }
+  }
+
+  return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+}

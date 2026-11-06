@@ -3,10 +3,13 @@ import {
   AppState,
   Transaction,
   TransactionType,
-  PersonId,
-  RecorderId,
 } from '../types';
-import { toEnglishDigits, formatMoney, getCurrentTimeStr } from '../utils/persian';
+import {
+  toEnglishDigits,
+  formatMoney,
+  getCurrentTimeStr,
+  getCurrentJalaliDateStr,
+} from '../utils/persian';
 import { CircularIcon } from './CircularIcon';
 import { JalaliDateTimePicker } from './JalaliDateTimePicker';
 import { BankLogoVector, IRANIAN_BANKS } from '../utils/iranianBanks';
@@ -34,10 +37,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [categoryId, setCategoryId] = useState('');
   const [subCategoryId, setSubCategoryId] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [spentBy, setSpentBy] = useState<PersonId>('shared');
-  const [recordedBy, setRecordedBy] = useState<RecorderId>('hootan');
   const [cardId, setCardId] = useState('');
-  const [jalaliDate, setJalaliDate] = useState('1403/08/14');
+  const [jalaliDate, setJalaliDate] = useState(() => getCurrentJalaliDateStr());
   const [time, setTime] = useState('19:30');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -54,8 +55,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setCategoryId(editingTransaction.categoryId);
       setSubCategoryId(editingTransaction.subCategoryId);
       setSelectedTags(editingTransaction.tags);
-      setSpentBy(editingTransaction.spentBy);
-      setRecordedBy(editingTransaction.recordedBy);
       setCardId(editingTransaction.cardId);
       setJalaliDate(editingTransaction.jalaliDate);
       setTime(editingTransaction.time);
@@ -70,10 +69,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setCategoryId(defaultCat?.id || '');
       setSubCategoryId(defaultCat?.subCategories[0]?.id || '');
       setSelectedTags([]);
-      setSpentBy('shared');
-      setRecordedBy('hootan');
       setCardId(defaultCard?.id || '');
-      setJalaliDate('1403/08/14');
+      setJalaliDate(getCurrentJalaliDateStr());
       setTime(getCurrentTimeStr());
       setNote('');
       setError('');
@@ -126,6 +123,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       return;
     }
 
+    const activeUserId = state.userId || 'hootan';
     onSave(
       {
         title: title.trim(),
@@ -134,8 +132,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         categoryId: activeCategory?.id || categoryId,
         subCategoryId: subCategoryId || activeCategory?.subCategories[0]?.id || '',
         tags: selectedTags,
-        spentBy,
-        recordedBy,
+        spentBy: activeUserId,
+        recordedBy: activeUserId,
         cardId,
         jalaliDate,
         time,
@@ -168,7 +166,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   {editingTransaction ? 'ویرایش تراکنش مالی' : 'ثبت دخل و خرج جدید'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  ثبت دقیق هزینه یا درآمد با دسته‌بندی ریز و کارت بانکی
+                  ثبت سریع هزینه یا درآمد با دسته‌بندی ریز و کارت بانکی
                 </p>
               </div>
             </div>
@@ -229,7 +227,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 placeholder={
                   type === 'expense'
                     ? 'مثلاً: خرید میوه و پروتئینی'
-                    : 'مثلاً: واریز حقوق آبان'
+                    : 'مثلاً: واریز حقوق ماهانه'
                 }
                 className="w-full px-4 py-3 rounded-2xl bg-slate-100/80 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
               />
@@ -254,64 +252,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 placeholder="مثلاً: ۱،۲۵۰،۰۰۰"
                 className="w-full px-4 py-3 rounded-2xl bg-slate-100/80 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-sm font-bold tabular-nums text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
               />
-            </div>
-          </div>
-
-          {/* Spent By (خرج توسط...) & Recorded By (ثبت توسط...) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                {type === 'expense' ? 'خرج شده برای / توسط:' : 'درآمد متعلق به:'}
-              </label>
-              <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800">
-                {(
-                  [
-                    { id: 'hootan', label: settings.hootanName },
-                    { id: 'fatemeh', label: settings.fatemehName },
-                    { id: 'shared', label: settings.sharedLabel },
-                  ] as { id: PersonId; label: string }[]
-                ).map((person) => (
-                  <button
-                    key={person.id}
-                    type="button"
-                    onClick={() => setSpentBy(person.id)}
-                    className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                      spentBy === person.id
-                        ? 'theme-bg text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                    }`}
-                  >
-                    {person.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                ثبت کننده در اپلیکیشن:
-              </label>
-              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800">
-                {(
-                  [
-                    { id: 'hootan', label: `ثبت توسط ${settings.hootanName}` },
-                    { id: 'fatemeh', label: `ثبت توسط ${settings.fatemehName}` },
-                  ] as { id: RecorderId; label: string }[]
-                ).map((rec) => (
-                  <button
-                    key={rec.id}
-                    type="button"
-                    onClick={() => setRecordedBy(rec.id)}
-                    className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                      recordedBy === rec.id
-                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                    }`}
-                  >
-                    {rec.label}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
 
@@ -386,12 +326,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               {cards.map((card) => {
                 const isSelected = cardId === card.id;
                 const bank = IRANIAN_BANKS[card.bankId] || IRANIAN_BANKS.other;
-                const ownerLabel =
-                  card.owner === 'hootan'
-                    ? settings.hootanName
-                    : card.owner === 'fatemeh'
-                    ? settings.fatemehName
-                    : settings.sharedLabel;
                 return (
                   <button
                     key={card.id}
@@ -410,7 +344,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                           {card.title}
                         </div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {bank.name} · {ownerLabel}
+                          {bank.name}
                         </div>
                       </div>
                     </div>
@@ -483,7 +417,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               type="submit"
               className="w-full py-3.5 rounded-2xl theme-gradient text-white font-extrabold text-sm shadow-lg hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer"
             >
-              {editingTransaction ? 'ذخیره تغییرات تراکنش' : 'ثبت نهایی در سیستم'}
+              {editingTransaction ? 'ذخیره تغییرات تراکنش' : 'ثبت نهایی در کیف پول'}
             </button>
           </div>
         </form>

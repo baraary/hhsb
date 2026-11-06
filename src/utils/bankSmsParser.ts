@@ -10,6 +10,8 @@ import {
   toEnglishDigits,
   getCurrentJalaliDateStr,
   getCurrentTimeStr,
+  formatDateToJalaliStr,
+  formatTimeFromDate,
 } from './persian';
 
 export interface ParsedBankSms {
@@ -22,6 +24,7 @@ export interface ParsedBankSms {
   isConvertedFromRial: boolean;
   title: string;
   jalaliDate: string;
+  receivedJalaliDate?: string;
   time: string;
   detectedBankId?: IranianBankId;
   detectedBankName?: string;
@@ -139,7 +142,8 @@ export function parseIranianBankSms(
   cards: BankCard[],
   categories: Category[],
   convertRialToToman = true,
-  sender?: string
+  sender?: string,
+  receivedAtMs?: number
 ): ParsedBankSms | null {
   const normalized = toEnglishDigits(rawText)
     .replace(/ي/g, 'ی')
@@ -258,18 +262,37 @@ export function parseIranianBankSms(
     }
   }
 
-  // 4. Extract Jalali Date & Time from SMS
-  let jalaliDate = getCurrentJalaliDateStr();
-  let time = getCurrentTimeStr();
+  // 4. Extract Jalali Date & Time from SMS (fallback to Android SMS received timestamp if available)
+  const receivedDateObj =
+    receivedAtMs && receivedAtMs > 0 ? new Date(receivedAtMs) : null;
+  const receivedJalaliDate = receivedDateObj
+    ? formatDateToJalaliStr(receivedDateObj)
+    : undefined;
+
+  let jalaliDate = receivedJalaliDate || getCurrentJalaliDateStr();
+  let time = receivedDateObj ? formatTimeFromDate(receivedDateObj) : getCurrentTimeStr();
 
   // Match YYYY/MM/DD or YY/MM/DD (e.g. 1403/08/15 or 03/08/15)
-  const dateMatch = normalized.match(/\b(14\d{2}|0[2-9])[/.-](0?[1-9]|1[0-2])[/.-](0?[1-9]|[12]\d|3[01])\b/);
+  const dateMatch = normalized.match(
+    /\b(14\d{2}|0[2-9])[/.-](0?[1-9]|1[0-2])[/.-](0?[1-9]|[12]\d|3[01])\b/
+  );
   if (dateMatch) {
     const rawYear = dateMatch[1];
     const fullYear = rawYear.length === 2 ? `14${rawYear}` : rawYear;
     const month = dateMatch[2].padStart(2, '0');
     const day = dateMatch[3].padStart(2, '0');
     jalaliDate = `${fullYear}/${month}/${day}`;
+  } else {
+    // Also support MM/DD without year (e.g. 08/15-20:15 in some Iranian bank SMS)
+    const shortDateMatch = normalized.match(
+      /(?:^|[\s_-])(0[1-9]|1[0-2])[/.-](0[1-9]|[12]\d|3[01])(?:[\s_-]|$)/
+    );
+    if (shortDateMatch) {
+      const currentYear = jalaliDate.split('/')[0] || '1403';
+      const month = shortDateMatch[1].padStart(2, '0');
+      const day = shortDateMatch[2].padStart(2, '0');
+      jalaliDate = `${currentYear}/${month}/${day}`;
+    }
   }
 
   // Match HH:MM
@@ -340,6 +363,7 @@ export function parseIranianBankSms(
     isConvertedFromRial: shouldDivideBy10,
     title,
     jalaliDate,
+    receivedJalaliDate,
     time,
     detectedBankId,
     detectedBankName,

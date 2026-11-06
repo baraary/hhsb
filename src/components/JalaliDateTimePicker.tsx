@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { ChevronUp, ChevronDown, X, Plus, Minus } from 'lucide-react';
 import {
   JALALI_MONTHS,
   toPersianDigits,
@@ -115,12 +116,13 @@ export const JalaliDateTimePicker: React.FC<JalaliDateTimePickerProps> = ({
               </span>
             </div>
           </div>
-          <span className="text-[11px] font-bold theme-text">
-            {activePopup === 'date' ? 'بستن ▲' : 'تغییر تاریخ ▼'}
+          <span className="text-[11px] font-bold theme-text flex items-center gap-1">
+            <span>{activePopup === 'date' ? 'بستن' : 'تغییر تاریخ'}</span>
+            {activePopup === 'date' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </span>
         </div>
 
-        {/* Direct 2-Box Time Control (Hour & Minute typing + +/- buttons, no quick-select clutter) */}
+        {/* Direct 2-Box Time Control */}
         <div className="flex items-center justify-between p-2.5 px-3 rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-100/80 dark:bg-slate-800/70">
           <div className="flex items-center gap-2">
             <CircularIcon name="clock" size="sm" color="#0ea5e9" />
@@ -138,17 +140,16 @@ export const JalaliDateTimePicker: React.FC<JalaliDateTimePickerProps> = ({
             </div>
           </div>
 
-          {/* 2 Small Boxes for Hour & Minute + +/- Steppers */}
           <div dir="ltr" className="flex items-center gap-1.5">
             {/* Hour Box with - / + */}
             <div className="flex items-center gap-1 bg-white dark:bg-slate-900 px-1.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => setExactTime(hourNum - 1, minuteNum)}
-                className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-black text-xs flex items-center justify-center cursor-pointer active:scale-95"
+                className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center cursor-pointer active:scale-95"
                 title="کاهش ساعت"
               >
-                -
+                <Minus size={12} strokeWidth={2.5} />
               </button>
               <input
                 type="text"
@@ -165,10 +166,10 @@ export const JalaliDateTimePicker: React.FC<JalaliDateTimePickerProps> = ({
               <button
                 type="button"
                 onClick={() => setExactTime(hourNum + 1, minuteNum)}
-                className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-black text-xs flex items-center justify-center cursor-pointer active:scale-95"
+                className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center cursor-pointer active:scale-95"
                 title="افزایش ساعت"
               >
-                +
+                <Plus size={12} strokeWidth={2.5} />
               </button>
             </div>
 
@@ -179,10 +180,10 @@ export const JalaliDateTimePicker: React.FC<JalaliDateTimePickerProps> = ({
               <button
                 type="button"
                 onClick={() => stepMinuteOneByOne(-1)}
-                className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-black text-xs flex items-center justify-center cursor-pointer active:scale-95"
+                className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center cursor-pointer active:scale-95"
                 title="کاهش دقیقه"
               >
-                -
+                <Minus size={12} strokeWidth={2.5} />
               </button>
               <input
                 type="text"
@@ -199,10 +200,10 @@ export const JalaliDateTimePicker: React.FC<JalaliDateTimePickerProps> = ({
               <button
                 type="button"
                 onClick={() => stepMinuteOneByOne(1)}
-                className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-black text-xs flex items-center justify-center cursor-pointer active:scale-95"
+                className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center cursor-pointer active:scale-95"
                 title="افزایش دقیقه"
               >
-                +
+                <Plus size={12} strokeWidth={2.5} />
               </button>
             </div>
           </div>
@@ -310,7 +311,6 @@ export const JalaliDateTimePicker: React.FC<JalaliDateTimePickerProps> = ({
   );
 };
 
-// Reusable Jalali Date Input with Interactive Calendar Popover for any date field across the app
 interface JalaliDateInputProps {
   value: string; // YYYY/MM/DD or empty
   onChange: (newDate: string) => void;
@@ -373,10 +373,10 @@ export const JalaliDateInput: React.FC<JalaliDateInputProps> = ({
                 e.stopPropagation();
                 onChange('');
               }}
-              className="text-rose-500 hover:text-rose-600 px-1 font-black cursor-pointer"
+              className="text-rose-500 hover:text-rose-600 p-0.5 cursor-pointer flex items-center justify-center"
               title="پاک کردن تاریخ"
             >
-              ×
+              <X size={13} strokeWidth={2.5} />
             </button>
           )}
           <CircularIcon name="calendar" size="xs" color="#10b981" />

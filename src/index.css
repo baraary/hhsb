@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --font-sans: 'Vazirmatn', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Vazirmatn', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Vazirmatn', system-ui, -apple-system, sans-serif;
+}
+
 @layer base {
   :root {
     --theme-primary: #10b981;
@@ -83,7 +89,7 @@
     --theme-gradient-to: #18181b;
   }
 
-  /* Monochrome Dark Mode: Brushed Titanium & Silver High-Contrast (Never black-on-black!) */
+  /* Monochrome Dark Mode: Brushed Titanium & Silver High-Contrast */
   .dark[data-color-theme="monochrome"] {
     --theme-primary: #52525b;
     --theme-primary-hover: #71717a;
@@ -124,8 +130,22 @@
     --theme-gradient-to: #15803d;
   }
 
+  html,
+  body,
+  *,
+  *::before,
+  *::after,
+  input,
+  button,
+  select,
+  textarea,
+  code,
+  pre,
+  svg text {
+    font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif !important;
+  }
+
   body {
-    font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif;
     direction: rtl;
     overflow-x: hidden;
     -webkit-tap-highlight-color: transparent;
@@ -155,13 +175,12 @@
   background-image: linear-gradient(135deg, var(--theme-gradient-from), var(--theme-gradient-to));
 }
 
-/* Monochrome Scoped Filter: Keeps the Theme Color Picker Swatches colorful while making all app views grayscale */
-[data-color-theme="monochrome"] .monochrome-scope,
+/* Monochrome Icon Filter ONLY on Circular Badges (Never on layout wrappers, which would trap fixed modals!) */
 [data-color-theme="monochrome"] .circular-icon-badge {
   filter: grayscale(100%);
 }
 
-/* Monochrome Dark Mode Surface Separation: Prevents black cards from blending into black backgrounds */
+/* Monochrome Dark Mode Surface Separation */
 .dark[data-color-theme="monochrome"] .theme-gradient {
   background-image: linear-gradient(135deg, #52525b 0%, #3f3f46 55%, #27272a 100%);
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -187,16 +206,34 @@
   border-color: #52525b !important;
 }
 
-/* Monochrome Bank Card Visuals: Carbon in Light Mode, Brushed Platinum-Titanium in Dark Mode */
+/* Frosted Glassmorphic Bank Card Surface */
+.glass-bank-card {
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  box-shadow:
+    0 14px 32px -8px rgba(15, 23, 42, 0.28),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Monochrome Frosted Glass Bank Card Visuals */
 .monochrome-bank-card {
-  background: linear-gradient(135deg, #3f3f46 0%, #27272a 55%, #18181b 100%);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: linear-gradient(135deg, rgba(82, 82, 91, 0.92) 0%, rgba(63, 63, 70, 0.88) 52%, rgba(39, 39, 42, 0.94) 100%);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow:
+    0 12px 28px -6px rgba(0, 0, 0, 0.32),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .dark .monochrome-bank-card {
-  background: linear-gradient(135deg, #63636b 0%, #46464f 50%, #2e2e36 100%);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.75), inset 0 1px 0 0 rgba(255, 255, 255, 0.25);
+  background: linear-gradient(135deg, rgba(113, 113, 122, 0.88) 0%, rgba(82, 82, 91, 0.84) 50%, rgba(46, 46, 54, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  box-shadow:
+    0 14px 30px -5px rgba(0, 0, 0, 0.65),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 /* Custom Scrollbar */

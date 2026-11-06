@@ -35,6 +35,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Smartphone,
   Coffee,
   ShoppingCart,
@@ -48,6 +49,17 @@ import {
   Layers,
   Lock,
   RefreshCw,
+  Palette,
+  Shuffle,
+  MessageSquare,
+  Clipboard,
+  Package,
+  Link2,
+  FileText,
+  ShieldCheck,
+  X,
+  Copy,
+  RotateCcw,
 } from 'lucide-react';
 
 export type IconName =
@@ -86,6 +98,7 @@ export type IconName =
   | 'chevron-left'
   | 'chevron-right'
   | 'chevron-down'
+  | 'chevron-up'
   | 'smartphone'
   | 'coffee'
   | 'shopping-cart'
@@ -98,7 +111,18 @@ export type IconName =
   | 'award'
   | 'layers'
   | 'lock'
-  | 'refresh';
+  | 'refresh'
+  | 'palette'
+  | 'shuffle'
+  | 'message-square'
+  | 'clipboard'
+  | 'package'
+  | 'link'
+  | 'file-text'
+  | 'shield'
+  | 'x'
+  | 'copy'
+  | 'rotate-ccw';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   'shopping-bag': ShoppingBag,
@@ -136,6 +160,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   'chevron-left': ChevronLeft,
   'chevron-right': ChevronRight,
   'chevron-down': ChevronDown,
+  'chevron-up': ChevronUp,
   smartphone: Smartphone,
   coffee: Coffee,
   'shopping-cart': ShoppingCart,
@@ -149,6 +174,17 @@ const ICON_MAP: Record<string, React.ElementType> = {
   layers: Layers,
   lock: Lock,
   refresh: RefreshCw,
+  palette: Palette,
+  shuffle: Shuffle,
+  'message-square': MessageSquare,
+  clipboard: Clipboard,
+  package: Package,
+  link: Link2,
+  'file-text': FileText,
+  shield: ShieldCheck,
+  x: X,
+  copy: Copy,
+  'rotate-ccw': RotateCcw,
 };
 
 export const AVAILABLE_ICONS: { id: IconName; label: string }[] = [
@@ -218,7 +254,7 @@ export const CircularIcon: React.FC<CircularIconProps> = ({
   if (variant === 'glass') {
     return (
       <div
-        className={`circular-icon-badge ${sizeClasses} rounded-full flex items-center justify-center shrink-0 bg-white/15 backdrop-blur-md border border-white/25 text-white ${className}`}
+        className={`circular-icon-badge ${sizeClasses} rounded-full flex items-center justify-center shrink-0 bg-white/20 backdrop-blur-md border border-white/30 text-white ${className}`}
       >
         <IconComponent size={iconSizes} strokeWidth={2.2} />
       </div>

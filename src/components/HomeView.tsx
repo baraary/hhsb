@@ -1,5 +1,20 @@
 import React, { useState } from 'react';
-import { AppState, Transaction, PersonId, DueReminder, ReminderRecurrence } from '../types';
+import {
+  MessageSquare,
+  Plus,
+  Check,
+  Edit3,
+  X,
+  ArrowLeft,
+  RotateCcw,
+  Award,
+} from 'lucide-react';
+import {
+  AppState,
+  Transaction,
+  DueReminder,
+  ReminderRecurrence,
+} from '../types';
 import {
   formatMoney,
   formatJalaliReadable,
@@ -23,6 +38,7 @@ interface HomeViewProps {
   onAddReminder: (rem: Omit<DueReminder, 'id'>) => void;
   onUpdateReminder: (id: string, rem: Omit<DueReminder, 'id'>) => void;
   onToggleReminderPaid: (id: string) => void;
+  onStepReminderInstallment: (id: string, delta: 1 | -1) => void;
   onDeleteReminder: (id: string) => void;
 }
 
@@ -36,11 +52,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onAddReminder,
   onUpdateReminder,
   onToggleReminderPaid,
+  onStepReminderInstallment,
   onDeleteReminder,
 }) => {
   const { transactions, cards, categories, tags, reminders = [], settings } = state;
-  const [personFilter, setPersonFilter] = useState<'all' | PersonId>('all');
-  const [recorderFilter, setRecorderFilter] = useState<'all' | 'hootan' | 'fatemeh'>('all');
+  const userName = settings.userName || settings.hootanName || 'کاربر';
+
+  const [typeFilter, setTypeFilter] = useState<'all' | 'expense' | 'income'>('all');
+  const [cardFilter, setCardFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Reminder Hub states
@@ -51,31 +70,32 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [remAmountStr, setRemAmountStr] = useState('');
   const [remDueDate, setRemDueDate] = useState(() => getCurrentJalaliDateStr());
   const [remCategory, setRemCategory] = useState<DueReminder['category']>('installment');
-  const [remPerson, setRemPerson] = useState<PersonId>('shared');
   const [remRecurrence, setRemRecurrence] = useState<ReminderRecurrence>('monthly');
-  const [remTotalInstallmentsStr, setRemTotalInstallmentsStr] = useState('');
+  const [remTotalInstallmentsStr, setRemTotalInstallmentsStr] = useState('12');
 
   const isMonochrome = settings.colorTheme === 'monochrome';
 
-  // Total balances across all cards
-  const totalInitial = cards.reduce((sum, c) => sum + c.initialBalance, 0);
+  // Calculate each card's real current balance (initial + card incomes - card expenses)
+  const getCardCurrentBalance = (cardId: string, initialBalance: number) => {
+    const cInc = transactions
+      .filter((t) => t.cardId === cardId && t.type === 'income')
+      .reduce((s, t) => s + t.amount, 0);
+    const cExp = transactions
+      .filter((t) => t.cardId === cardId && t.type === 'expense')
+      .reduce((s, t) => s + t.amount, 0);
+    return initialBalance + cInc - cExp;
+  };
+
+  const totalNetWorth = cards.reduce(
+    (sum, c) => sum + getCardCurrentBalance(c.id, c.initialBalance),
+    0
+  );
+
   const totalIncome = transactions
     .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0);
   const totalExpense = transactions
     .filter((t) => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const netWorth = totalInitial + totalIncome - totalExpense;
-
-  // Expenses breakdown by person
-  const hootanExpense = transactions
-    .filter((t) => t.type === 'expense' && t.spentBy === 'hootan')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const fatemehExpense = transactions
-    .filter((t) => t.type === 'expense' && t.spentBy === 'fatemeh')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const sharedExpense = transactions
-    .filter((t) => t.type === 'expense' && t.spentBy === 'shared')
     .reduce((sum, t) => sum + t.amount, 0);
 
   // Identify tags for 'بدهی' (Debt), 'طلب' (Receivable), or 'قسط' (Installment)
@@ -98,8 +118,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
   // Filtered recent transactions
   const filteredTransactions = [...transactions]
     .filter((tx) => {
-      if (personFilter !== 'all' && tx.spentBy !== personFilter) return false;
-      if (recorderFilter !== 'all' && tx.recordedBy !== recorderFilter) return false;
+      if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
+      if (cardFilter !== 'all' && tx.cardId !== cardFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         const cat = categories.find((c) => c.id === tx.categoryId);
@@ -124,7 +144,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
       : 0;
 
   const latestMonth =
-    transactions.length > 0 ? getMonthKey(transactions[0].jalaliDate) : '1403/08';
+    transactions.length > 0
+      ? getMonthKey(transactions[0].jalaliDate)
+      : getMonthKey(getCurrentJalaliDateStr());
 
   const handleSaveReminderForm = (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,7 +161,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       amount: amt,
       dueDate: remDueDate.trim() || getCurrentJalaliDateStr(),
       category: remCategory,
-      person: remPerson,
+      person: state.userId || 'hootan',
       isPaid: false,
       recurrence: remRecurrence,
       totalInstallments: remRecurrence !== 'once' && totalInst > 0 ? totalInst : undefined,
@@ -152,6 +174,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         ...payload,
         isPaid: existing?.isPaid || false,
         paidInstallments: existing?.paidInstallments || 0,
+        paidDates: existing?.paidDates || [],
       });
     } else {
       onAddReminder(payload);
@@ -159,7 +182,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
     setRemTitle('');
     setRemAmountStr('');
-    setRemTotalInstallmentsStr('');
+    setRemTotalInstallmentsStr('12');
     setEditingReminderId(null);
     setIsAddingReminder(false);
   };
@@ -170,7 +193,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
     setRemAmountStr(String(rem.amount));
     setRemDueDate(rem.dueDate);
     setRemCategory(rem.category);
-    setRemPerson(rem.person);
     setRemRecurrence(rem.recurrence || 'once');
     setRemTotalInstallmentsStr(rem.totalInstallments ? String(rem.totalInstallments) : '');
     setIsAddingReminder(true);
@@ -178,63 +200,67 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   return (
     <div className="space-y-6 pb-8">
-      {/* Top Hero Balance & Couple Summary Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* Main Hero Balance Card */}
-        <div className="lg:col-span-7 rounded-3xl theme-gradient text-white p-6 sm:p-7 shadow-xl relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute -left-16 -top-16 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-          <div className="absolute -right-12 -bottom-16 w-56 h-56 rounded-full bg-black/15 blur-xl pointer-events-none" />
+      {/* Top Hero Balance & Personal Cards Summary Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* Main Hero Balance Card (Slim & Compact) */}
+        <div className="lg:col-span-7 rounded-2xl sm:rounded-3xl theme-gradient text-white px-4 py-3.5 sm:px-5 sm:py-4 shadow-lg relative overflow-hidden flex flex-col justify-between">
+          <div className="absolute -left-14 -top-14 w-48 h-48 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+          <div className="absolute -right-10 -bottom-14 w-44 h-44 rounded-full bg-black/15 blur-xl pointer-events-none" />
 
-          <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <CircularIcon name="wallet" size="md" variant="glass" />
+          <div className="relative z-10 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <CircularIcon name="wallet" size="sm" variant="glass" />
               <div>
-                <span className="text-xs text-white/80 block">
-                  موجودی کل دارایی کارت‌های {settings.hootanName} و {settings.fatemehName}
+                <span className="text-[11px] sm:text-xs text-white/90 font-bold block leading-tight">
+                  موجودی کل کیف پول {userName} ({toPersianDigits(cards.length)} کارت)
                 </span>
-                <span className="text-xs font-semibold text-white/95">
+                <span className="text-[10px] sm:text-[11px] font-medium text-white/80">
                   دوره فعلی · {formatMonthKeyReadable(latestMonth)}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={onOpenBankSms}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/20 hover:bg-white/30 text-white font-extrabold text-xs backdrop-blur-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white font-extrabold text-[11px] sm:text-xs backdrop-blur-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
                 title="خواندن خودکار پیامک‌های بانکی"
               >
-                <span>💬 پیامک بانکی</span>
+                <MessageSquare size={13} strokeWidth={2.4} />
+                <span>پیامک بانکی</span>
               </button>
               <button
                 type="button"
                 onClick={onAddTransaction}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white text-slate-900 font-extrabold text-xs shadow-md hover:bg-white/90 active:scale-95 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                className="flex items-center gap-1 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white text-slate-900 font-extrabold text-[11px] sm:text-xs shadow-sm hover:bg-white/90 active:scale-95 transition-all cursor-pointer whitespace-nowrap shrink-0"
               >
-                <span>+ ثبت دخل و خرج</span>
+                <Plus size={14} strokeWidth={2.6} />
+                <span>ثبت دخل و خرج</span>
               </button>
             </div>
           </div>
 
-          <div className="relative z-10 my-6">
-            <div className="flex items-baseline gap-2">
-              <h2 className="text-3xl sm:text-4xl font-black tabular-nums tracking-tight">
-                {formatMoney(netWorth)}
+          <div className="relative z-10 my-2.5 sm:my-3 flex flex-col sm:flex-row sm:items-end justify-between gap-2.5">
+            <div className="flex items-baseline gap-1.5">
+              <h2 className="text-2xl sm:text-3xl font-black tabular-nums tracking-tight leading-none">
+                {formatMoney(totalNetWorth)}
               </h2>
-              <span className="text-sm font-medium text-white/85">{settings.currencyUnit}</span>
+              <span className="text-xs font-medium text-white/85">
+                {settings.currencyUnit}
+              </span>
             </div>
 
-            {/* Monthly Budget Progress Bar */}
+            {/* Budget Progress Bar */}
             {settings.monthlyTotalBudget > 0 && (
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs text-white/90 mb-1.5">
-                  <span>مصرف بودجه ماهانه خانوار</span>
+              <div className="w-full sm:max-w-[230px]">
+                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-white/90 mb-1">
+                  <span>مصرف بودجه</span>
                   <span className="tabular-nums font-bold">
                     {toPersianDigits(budgetPercent)}٪ از {formatMoney(settings.monthlyTotalBudget)}
                   </span>
                 </div>
-                <div className="w-full h-2 rounded-full bg-black/25 overflow-hidden">
+                <div className="w-full h-1.5 rounded-full bg-black/25 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
                       budgetPercent > 90 ? 'bg-rose-300' : 'bg-white'
@@ -247,22 +273,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           {/* Income vs Expense Strip */}
-          <div className="relative z-10 grid grid-cols-2 gap-3 pt-4 border-t border-white/15">
-            <div className="flex items-center gap-3">
-              <CircularIcon name="arrow-down" size="sm" variant="glass" />
-              <div>
-                <span className="text-[11px] text-white/75 block">کل ورودی و درآمد</span>
-                <span className="text-sm sm:text-base font-extrabold tabular-nums text-emerald-100">
+          <div className="relative z-10 grid grid-cols-2 gap-2.5 pt-2.5 border-t border-white/15">
+            <div className="flex items-center gap-2">
+              <CircularIcon name="arrow-down" size="xs" variant="glass" />
+              <div className="min-w-0">
+                <span className="text-[10px] text-white/75 block leading-tight">کل ورودی / درآمد</span>
+                <span className="text-xs sm:text-sm font-extrabold tabular-nums text-emerald-100">
                   +{formatMoney(totalIncome)}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <CircularIcon name="arrow-up" size="sm" variant="glass" />
-              <div>
-                <span className="text-[11px] text-white/75 block">کل مخارج ثبت شده</span>
-                <span className="text-sm sm:text-base font-extrabold tabular-nums text-rose-100">
+            <div className="flex items-center gap-2">
+              <CircularIcon name="arrow-up" size="xs" variant="glass" />
+              <div className="min-w-0">
+                <span className="text-[10px] text-white/75 block leading-tight">کل هزینه‌ها / خرج</span>
+                <span className="text-xs sm:text-sm font-extrabold tabular-nums text-rose-100">
                   -{formatMoney(totalExpense)}
                 </span>
               </div>
@@ -270,91 +296,82 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         </div>
 
-        {/* Couple Expense Share & Quick Bank Cards Preview */}
-        <div className="lg:col-span-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 flex flex-col justify-between space-y-4">
+        {/* Right Card: Bank Cards Live Balances Summary */}
+        <div className="lg:col-span-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 px-4 py-3.5 sm:px-5 sm:py-4 flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <CircularIcon name="users" size="sm" color="#8b5cf6" />
+            <div className="flex items-center gap-2">
+              <CircularIcon name="credit-card" size="xs" color="#0ea5e9" />
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                  تفکیک سهم مخارج زوجین
+                <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                  موجودی کارت‌های بانکی {userName}
                 </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  مقایسه خرج‌های شخصی و مشترک
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  سهم هر کارت از کل موجودی کیف پول شما
                 </p>
               </div>
             </div>
 
             <button
               type="button"
-              onClick={() => onNavigateTab(2)}
-              className="text-xs font-bold theme-text hover:underline cursor-pointer whitespace-nowrap"
+              onClick={() => onNavigateTab(1)}
+              className="text-xs font-bold theme-text hover:underline cursor-pointer flex items-center gap-1 whitespace-nowrap"
             >
-              آمار کامل ←
+              <span>مدیریت کارت‌ها</span>
+              <ArrowLeft size={13} />
             </button>
           </div>
 
-          {/* 3-Row Person Breakdown */}
-          <div className="space-y-3">
-            {[
-              {
-                id: 'hootan',
-                label: `خرج شخصی ${settings.hootanName}`,
-                amount: hootanExpense,
-                color: '#0ea5e9',
-                icon: 'user',
-              },
-              {
-                id: 'fatemeh',
-                label: `خرج شخصی ${settings.fatemehName}`,
-                amount: fatemehExpense,
-                color: '#ec4899',
-                icon: 'user',
-              },
-              {
-                id: 'shared',
-                label: `هزینه‌های ${settings.sharedLabel} منزل`,
-                amount: sharedExpense,
-                color: '#10b981',
-                icon: 'users',
-              },
-            ].map((item) => {
-              const pct =
-                totalExpense > 0 ? Math.round((item.amount / totalExpense) * 100) : 0;
-              return (
-                <div key={item.id} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <CircularIcon name={item.icon} size="xs" color={item.color} />
-                      <span className="font-bold text-slate-700 dark:text-slate-200">
-                        {item.label}
-                      </span>
+          {cards.length === 0 ? (
+            <div className="py-6 text-center text-xs text-slate-400">
+              هنوز کارتی ثبت نشده است.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {cards.slice(0, 4).map((c) => {
+                const bal = getCardCurrentBalance(c.id, c.initialBalance);
+                const bank = IRANIAN_BANKS[c.bankId] || IRANIAN_BANKS.other;
+                const pct =
+                  totalNetWorth > 0
+                    ? Math.max(0, Math.min(100, Math.round((bal / totalNetWorth) * 100)))
+                    : 0;
+                return (
+                  <div key={c.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <BankLogoVector bankId={c.bankId} size={22} mono={isMonochrome} />
+                        <span className="font-bold text-slate-700 dark:text-slate-200 truncate">
+                          {c.title}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 tabular-nums shrink-0">
+                        <span className="font-extrabold text-slate-900 dark:text-white">
+                          {formatMoney(bal)}
+                        </span>
+                        <span className="text-slate-400">·</span>
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {toPersianDigits(pct)}٪
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 tabular-nums">
-                      <span className="font-extrabold text-slate-900 dark:text-white">
-                        {formatMoney(item.amount)}
-                      </span>
-                      <span className="text-slate-400">·</span>
-                      <span className="text-slate-500 dark:text-slate-400">
-                        {toPersianDigits(pct)}٪
-                      </span>
+                    <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${pct}%`,
+                          backgroundColor: bank.accentColor || '#10b981',
+                        }}
+                      />
                     </div>
                   </div>
-                  <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{ width: `${pct}%`, backgroundColor: item.color }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
-          {/* Quick Card Balances Row */}
+          {/* Quick Card Logos Footer */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center -space-x-2 space-x-reverse">
-              {cards.slice(0, 4).map((c) => (
+              {cards.slice(0, 6).map((c) => (
                 <BankLogoVector
                   key={c.id}
                   bankId={c.bankId}
@@ -367,30 +384,31 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <button
               type="button"
               onClick={() => onNavigateTab(1)}
-              className="text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              className="text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer"
             >
-              مدیریت {toPersianDigits(cards.length)} کارت بانکی ←
+              <span>همه کارت‌ها ({toPersianDigits(cards.length)})</span>
+              <ArrowLeft size={13} />
             </button>
           </div>
         </div>
       </div>
 
-      {/* NEW SECTION: REMINDERS HUB (تراکنش‌های دارای تگ بدهی / طلب + یادآوری اقساط و اجاره) */}
+      {/* REMINDERS HUB */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <CircularIcon name="clock" size="sm" color="#f59e0b" />
             <div>
               <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
-                یادآور بدهی‌ها، مطالبات (طلب)، اقساط و اجاره
+                یادآور اقساط، بدهی‌ها، مطالبات و اجاره
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                نمایش خودکار تراکنش‌های دارای تگ «#بدهی» یا «#طلب» به همراه تقویم سررسید اقساط و اجاره
+                تیک زدن هر نوبت واریز، کسر خودکار از تعداد اقساط باقی‌مانده و انتقال سررسید به دوره بعد
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
             <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
               <button
                 type="button"
@@ -401,7 +419,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     : 'text-slate-600 dark:text-slate-400'
                 }`}
               >
-                سررسید اقساط و اجاره ({toPersianDigits(reminders.filter((r) => !r.isPaid).length)})
+                سررسید اقساط ({toPersianDigits(reminders.filter((r) => !r.isPaid).length)})
               </button>
               <button
                 type="button"
@@ -427,14 +445,24 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     setEditingReminderId(null);
                     setRemTitle('');
                     setRemAmountStr('');
-                    setRemTotalInstallmentsStr('');
+                    setRemTotalInstallmentsStr('12');
                     setRemRecurrence('monthly');
                     setIsAddingReminder(true);
                   }
                 }}
-                className="px-3 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer whitespace-nowrap"
+                className="px-3 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center gap-1 whitespace-nowrap"
               >
-                {isAddingReminder ? 'بستن فرم' : '+ یادآور / قسط جدید'}
+                {isAddingReminder ? (
+                  <>
+                    <X size={14} />
+                    <span>بستن فرم</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus size={14} strokeWidth={2.5} />
+                    <span>یادآور / قسط جدید</span>
+                  </>
+                )}
               </button>
             )}
           </div>
@@ -449,9 +477,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <button
                   type="button"
                   onClick={onAddTransaction}
-                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold inline-flex items-center gap-1 cursor-pointer"
                 >
-                  + ثبت تراکنش با تگ بدهی یا طلب
+                  <Plus size={14} />
+                  <span>ثبت تراکنش با تگ بدهی یا طلب</span>
                 </button>
               </div>
             ) : (
@@ -461,12 +490,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   const isReceivable = txTagObjects.some(
                     (t) => t.id === 'tag_receivable' || t.name.includes('طلب')
                   );
-                  const spentByLabel =
-                    tx.spentBy === 'hootan'
-                      ? settings.hootanName
-                      : tx.spentBy === 'fatemeh'
-                      ? settings.fatemehName
-                      : settings.sharedLabel;
 
                   return (
                     <div
@@ -488,8 +511,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             <span className="font-bold text-slate-700 dark:text-slate-300">
                               {isReceivable ? 'طلب' : 'بدهی / قسط'}
                             </span>
-                            <span>·</span>
-                            <span>مربوط به: {spentByLabel}</span>
                             <span>·</span>
                             <span className="tabular-nums">
                               {formatJalaliReadable(tx.jalaliDate)}
@@ -537,14 +558,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       type="text"
                       value={remTitle}
                       onChange={(e) => setRemTitle(e.target.value)}
-                      placeholder="مثلاً: قسط وام ازدواج یا اجاره خانه"
+                      placeholder="مثلاً: قسط وام یا اسنپ‌پی"
                       className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
                     />
                   </div>
 
                   <div className="sm:col-span-3">
                     <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                      مبلغ هر نوبت ({settings.currencyUnit})
+                      مبلغ هر قسط / نوبت ({settings.currencyUnit})
                     </label>
                     <input
                       type="text"
@@ -552,7 +573,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       value={
                         remAmountStr
                           ? formatMoney(
-                              parseInt(toEnglishDigits(remAmountStr).replace(/\D/g, '') || '0', 10)
+                              parseInt(
+                                toEnglishDigits(remAmountStr).replace(/\D/g, '') || '0',
+                                10
+                              )
                             )
                           : ''
                       }
@@ -586,7 +610,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       }
                       className="w-full px-2 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
                     >
-                      <option value="installment">قسط وام</option>
+                      <option value="installment">قسط وام / خرید</option>
                       <option value="rent">اجاره و شارژ</option>
                       <option value="debt">بدهی</option>
                       <option value="receivable">طلب دریافتی</option>
@@ -595,11 +619,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   </div>
                 </div>
 
-                {/* Second row of form: Recurrence (تکرار ماهانه، سالانه و...) + Installment Count + Person */}
+                {/* Second row of form: Recurrence + Total Installments */}
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end pt-1">
-                  <div className="sm:col-span-4">
+                  <div className="sm:col-span-5">
                     <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                      دوره تکرار خودکار (مناسب اقساط و اجاره)
+                      دوره تکرار خودکار
                     </label>
                     <select
                       value={remRecurrence}
@@ -608,7 +632,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       }
                       className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
                     >
-                      <option value="monthly">تکرار ماهانه (هر ماه در همین روز)</option>
+                      <option value="monthly">تکرار ماهانه (هر ماه)</option>
                       <option value="yearly">تکرار سالانه (هر سال)</option>
                       <option value="quarterly">تکرار هر ۳ ماه (فصلی)</option>
                       <option value="weekly">تکرار هفتگی</option>
@@ -617,9 +641,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   </div>
 
                   {remRecurrence !== 'once' && (
-                    <div className="sm:col-span-3">
+                    <div className="sm:col-span-4">
                       <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                        تعداد کل اقساط (اختیاری)
+                        تعداد کل اقساط / دفعات (برای تیک زدن)
                       </label>
                       <input
                         type="text"
@@ -636,22 +660,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     </div>
                   )}
 
-                  <div className={remRecurrence !== 'once' ? 'sm:col-span-2' : 'sm:col-span-5'}>
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                      سهم / مربوط به
-                    </label>
-                    <select
-                      value={remPerson}
-                      onChange={(e) => setRemPerson(e.target.value as PersonId)}
-                      className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
-                    >
-                      <option value="shared">{settings.sharedLabel}</option>
-                      <option value="hootan">{settings.hootanName}</option>
-                      <option value="fatemeh">{settings.fatemehName}</option>
-                    </select>
-                  </div>
-
-                  <div className="sm:col-span-3 flex gap-2">
+                  <div
+                    className={
+                      remRecurrence !== 'once'
+                        ? 'sm:col-span-3 flex gap-2'
+                        : 'sm:col-span-7 flex gap-2'
+                    }
+                  >
                     <button
                       type="submit"
                       className="flex-1 py-2 px-4 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer"
@@ -665,17 +680,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
             {reminders.length === 0 ? (
               <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400 space-y-2">
-                <p>هیچ یادآور قسط یا بدهی فعالی ثبت نشده است.</p>
+                <p>هیچ یادآور یا قسطی در حساب شما ثبت نشده است.</p>
                 <button
                   type="button"
                   onClick={() => setIsAddingReminder(true)}
-                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold inline-flex items-center gap-1 cursor-pointer"
                 >
-                  + افزودن اولین قسط یا یادآور دوره ای
+                  <Plus size={14} />
+                  <span>افزودن قسط یا یادآور جدید</span>
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                 {reminders.map((rem) => {
                   const catLabel =
                     rem.category === 'installment'
@@ -687,12 +703,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       : rem.category === 'receivable'
                       ? 'طلب'
                       : 'قبض';
-                  const personLabel =
-                    rem.person === 'hootan'
-                      ? settings.hootanName
-                      : rem.person === 'fatemeh'
-                      ? settings.fatemehName
-                      : settings.sharedLabel;
 
                   const recLabel =
                     rem.recurrence === 'monthly'
@@ -705,91 +715,281 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       ? 'هفتگی'
                       : '';
 
-                  const isRecurring = Boolean(rem.recurrence && rem.recurrence !== 'once');
+                  const isRecurring = Boolean(
+                    rem.recurrence && rem.recurrence !== 'once'
+                  );
+                  const paidCount = rem.paidInstallments || 0;
+                  const totalCount = rem.totalInstallments || 0;
+                  const remainingCount =
+                    totalCount > 0 ? Math.max(0, totalCount - paidCount) : null;
+                  const progressPct =
+                    totalCount > 0
+                      ? Math.min(100, Math.round((paidCount / totalCount) * 100))
+                      : 0;
 
                   return (
                     <div
                       key={rem.id}
-                      className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2.5 transition-all ${
+                      className={`p-4 rounded-2xl border space-y-3 transition-all ${
                         rem.isPaid
-                          ? 'border-slate-200/50 dark:border-slate-800/50 bg-slate-50/40 dark:bg-slate-800/20 opacity-60'
+                          ? 'border-emerald-500/30 bg-emerald-500/5 opacity-75'
                           : 'border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <button
-                          type="button"
-                          onClick={() => onToggleReminderPaid(rem.id)}
-                          title={
-                            rem.isPaid
-                              ? 'فعال‌سازی مجدد یادآور'
-                              : isRecurring
-                              ? 'ثبت پرداخت این دوره و رفتن به سررسید بعدی'
-                              : 'علامت به عنوان تسویه شده'
-                          }
-                          className="cursor-pointer shrink-0"
-                        >
-                          <CircularIcon
-                            name={rem.isPaid ? 'check' : 'clock'}
-                            color={rem.isPaid ? '#10b981' : '#f59e0b'}
-                            size="sm"
-                            variant={rem.isPaid ? 'solid' : 'soft'}
-                          />
-                        </button>
-                        <div
-                          onClick={() => handleStartEditReminder(rem)}
-                          className="min-w-0 cursor-pointer"
-                          title="برای ویرایش کلیک کنید"
-                        >
-                          <h4
-                            className={`text-xs font-extrabold truncate ${
+                      {/* Top Header of Reminder Card */}
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              isRecurring && !rem.isPaid
+                                ? onStepReminderInstallment(rem.id, 1)
+                                : onToggleReminderPaid(rem.id)
+                            }
+                            title={
                               rem.isPaid
-                                ? 'line-through text-slate-400'
-                                : 'text-slate-900 dark:text-white'
-                            }`}
+                                ? 'فعال‌سازی مجدد'
+                                : isRecurring
+                                ? 'تیک زدن واریز این نوبت و کم شدن از اقساط مانده'
+                                : 'علامت به عنوان تسویه شده'
+                            }
+                            className="cursor-pointer shrink-0"
                           >
-                            {rem.title}
-                          </h4>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
-                            {catLabel} · {personLabel} · سررسید: {toPersianDigits(rem.dueDate)}
-                          </div>
-                          {(recLabel || rem.totalInstallments) && (
-                            <div className="text-[10px] font-bold theme-text mt-0.5 tabular-nums">
-                              {recLabel ? `↻ تکرار ${recLabel}` : ''}
-                              {rem.totalInstallments
-                                ? ` · قسط ${toPersianDigits(
-                                    (rem.paidInstallments || 0) + (rem.isPaid ? 0 : 1)
-                                  )} از ${toPersianDigits(rem.totalInstallments)}`
-                                : rem.paidInstallments
-                                ? ` · ${toPersianDigits(rem.paidInstallments)} نوبت پرداخت شد`
-                                : ''}
+                            <CircularIcon
+                              name={rem.isPaid ? 'check' : 'clock'}
+                              color={rem.isPaid ? '#10b981' : '#f59e0b'}
+                              size="sm"
+                              variant={rem.isPaid ? 'solid' : 'soft'}
+                            />
+                          </button>
+
+                          <div
+                            onClick={() => handleStartEditReminder(rem)}
+                            className="min-w-0 cursor-pointer"
+                            title="برای ویرایش عنوان یا تعداد اقساط کلیک کنید"
+                          >
+                            <h4
+                              className={`text-xs sm:text-sm font-extrabold truncate ${
+                                rem.isPaid
+                                  ? 'line-through text-slate-400'
+                                  : 'text-slate-900 dark:text-white'
+                              }`}
+                            >
+                              {rem.title}
+                            </h4>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                              {catLabel}
+                              {recLabel ? ` · تکرار ${recLabel}` : ''}
                             </div>
-                          )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="text-left tabular-nums ml-1">
+                            <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                              {formatMoney(rem.amount)}
+                            </div>
+                            <span className="text-[10px] text-slate-400">
+                              {rem.isPaid ? 'تسویه کامل' : `${settings.currencyUnit} / نوبت`}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditReminder(rem)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-sky-500 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 cursor-pointer"
+                            title="ویرایش یادآور"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDeleteReminder(rem.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 cursor-pointer"
+                            title="حذف دائمی یادآور"
+                          >
+                            <X size={14} />
+                          </button>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="text-left tabular-nums">
-                          <div className="text-xs font-black text-slate-900 dark:text-white">
-                            {formatMoney(rem.amount)}
+                      {/* Recurring Installment Tracker & Check-Off Section */}
+                      {isRecurring ? (
+                        <div className="p-3 rounded-xl bg-white dark:bg-slate-900/90 border border-slate-200/70 dark:border-slate-800 space-y-2.5">
+                          {/* Paid vs Remaining Counter Row */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs tabular-nums">
+                            <div className="flex items-center gap-3">
+                              <span className="font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                <Check size={13} strokeWidth={2.6} />
+                                <span>
+                                  پرداخت‌شده: {toPersianDigits(paidCount)}{' '}
+                                  {totalCount > 0 ? `از ${toPersianDigits(totalCount)}` : 'نوبت'}
+                                </span>
+                              </span>
+
+                              {remainingCount !== null ? (
+                                <span className="font-extrabold text-amber-600 dark:text-amber-400">
+                                  · مانده: {toPersianDigits(remainingCount)} قسط
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditReminder(rem)}
+                                  className="text-[11px] font-bold text-sky-500 hover:underline cursor-pointer"
+                                >
+                                  + تعیین تعداد کل اقساط
+                                </button>
+                              )}
+                            </div>
+
+                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                              {rem.isPaid ? (
+                                <>
+                                  <Award size={13} className="text-emerald-500" />
+                                  <span>همه اقساط پرداخت شد</span>
+                                </>
+                              ) : (
+                                <span>سررسید بعدی: {formatJalaliReadable(rem.dueDate)}</span>
+                              )}
+                            </span>
                           </div>
-                          <span className="text-[10px] text-slate-400">
-                            {rem.isPaid
-                              ? 'تسویه شد'
-                              : isRecurring
-                              ? 'تمدید خودکار'
-                              : settings.currencyUnit}
-                          </span>
+
+                          {/* Progress bar + Remaining Money if totalInstallments is set */}
+                          {totalCount > 0 && (
+                            <div className="space-y-1">
+                              <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                                  style={{ width: `${progressPct}%` }}
+                                />
+                              </div>
+                              {remainingCount !== null && remainingCount > 0 && (
+                                <div className="flex items-center justify-between text-[10px] text-slate-400 tabular-nums">
+                                  <span>پیشرفت اقساط: {toPersianDigits(progressPct)}٪</span>
+                                  <span>
+                                    مبلغ کل باقی‌مانده:{' '}
+                                    {formatMoney(
+                                      remainingCount * rem.amount,
+                                      true,
+                                      settings.currencyUnit
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Interactive Checkboxes for Installments (when totalCount <= 36) */}
+                          {totalCount > 0 && totalCount <= 36 && (
+                            <div
+                              data-no-swipe="true"
+                              onTouchStart={(e) => e.stopPropagation()}
+                              onTouchMove={(e) => e.stopPropagation()}
+                              onTouchEnd={(e) => e.stopPropagation()}
+                              className="flex flex-wrap items-center gap-1.5 pt-1"
+                            >
+                              {Array.from({ length: totalCount }, (_, i) => i + 1).map(
+                                (instNum) => {
+                                  const isChecked = instNum <= paidCount;
+                                  const isNext = instNum === paidCount + 1;
+                                  const isLastChecked = instNum === paidCount;
+
+                                  return (
+                                    <button
+                                      key={instNum}
+                                      type="button"
+                                      onClick={() => {
+                                        if (isNext) {
+                                          onStepReminderInstallment(rem.id, 1);
+                                        } else if (isLastChecked) {
+                                          onStepReminderInstallment(rem.id, -1);
+                                        } else if (!isChecked) {
+                                          onStepReminderInstallment(rem.id, 1);
+                                        }
+                                      }}
+                                      title={
+                                        isChecked
+                                          ? `قسط ${toPersianDigits(instNum)} پرداخت شده (برای لغو کلیک کنید)`
+                                          : `تیک زدن قسط ${toPersianDigits(instNum)}`
+                                      }
+                                      className={`h-7 min-w-[32px] px-1.5 rounded-lg text-[11px] font-extrabold tabular-nums flex items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                                        isChecked
+                                          ? 'bg-emerald-500 text-white shadow-2xs'
+                                          : isNext
+                                          ? 'border-2 border-amber-500 text-amber-600 dark:text-amber-400 bg-amber-500/10'
+                                          : 'border border-slate-200 dark:border-slate-700 text-slate-400 hover:border-slate-400'
+                                      }`}
+                                    >
+                                      <span>{toPersianDigits(instNum)}</span>
+                                      {isChecked && <Check size={11} strokeWidth={2.8} />}
+                                    </button>
+                                  );
+                                }
+                              )}
+                            </div>
+                          )}
+
+                          {/* Action Buttons to Check Off Next Payment or Undo */}
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            {!rem.isPaid ? (
+                              <button
+                                type="button"
+                                onClick={() => onStepReminderInstallment(rem.id, 1)}
+                                className="flex-1 py-2 px-3 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs hover:opacity-95"
+                              >
+                                <Check size={14} strokeWidth={2.6} />
+                                <span>
+                                  تیک زدن واریز قسط {toPersianDigits(paidCount + 1)}
+                                  {remainingCount !== null && remainingCount > 0
+                                    ? ` (مانده بعد از این: ${toPersianDigits(
+                                        remainingCount - 1
+                                      )} قسط)`
+                                    : ''}
+                                </span>
+                              </button>
+                            ) : (
+                              <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                <Check size={14} strokeWidth={2.6} />
+                                <span>تمام اقساط این تعهد تسویه شده است</span>
+                              </span>
+                            )}
+
+                            {paidCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => onStepReminderInstallment(rem.id, -1)}
+                                className="px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1"
+                                title="لغو آخرین تیک واریز و بازگشت قسط"
+                              >
+                                <RotateCcw size={12} />
+                                <span>اصلاح</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => onDeleteReminder(rem.id)}
-                          className="text-slate-400 hover:text-rose-500 text-sm font-bold px-1.5 py-0.5 cursor-pointer"
-                          title="حذف دائمی یادآور"
-                        >
-                          ×
-                        </button>
-                      </div>
+                      ) : (
+                        <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                          <span className="tabular-nums">
+                            سررسید: {formatJalaliReadable(rem.dueDate)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onToggleReminderPaid(rem.id)}
+                            className="text-xs font-bold theme-text hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            {rem.isPaid ? (
+                              <>
+                                <RotateCcw size={12} />
+                                <span>برگرداندن به حالت پرداخت‌نشده</span>
+                              </>
+                            ) : (
+                              <>
+                                <Check size={13} strokeWidth={2.5} />
+                                <span>تیک تسویه کامل</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -806,10 +1006,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <CircularIcon name="layers" size="sm" color="#10b981" />
             <div>
               <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                تراکنش‌های اخیر
+                تراکنش‌های اخیر ({toPersianDigits(filteredTransactions.length)} مورد)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                فیلتر بر اساس خرج‌کننده، ثبت‌کننده یا جستجوی سریع
+                فیلتر بر اساس نوع تراکنش، کارت بانکی و جستجوی سریع
               </p>
             </div>
           </div>
@@ -829,24 +1029,28 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         </div>
 
-        {/* Interactive Filter Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-          {/* Spent By Filter */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-x-auto max-w-full">
+        {/* Interactive Filter Controls: Type + Bank Card (Isolated from Page Swipe!) */}
+        <div
+          data-no-swipe="true"
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+          className="flex flex-wrap items-center justify-between gap-2 pt-1"
+        >
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
             {(
               [
-                { id: 'all', label: 'همه خرج‌ها' },
-                { id: 'hootan', label: `خرج ${settings.hootanName}` },
-                { id: 'fatemeh', label: `خرج ${settings.fatemehName}` },
-                { id: 'shared', label: settings.sharedLabel },
-              ] as { id: 'all' | PersonId; label: string }[]
+                { id: 'all', label: 'همه تراکنش‌ها' },
+                { id: 'expense', label: 'هزینه‌ها (خرج)' },
+                { id: 'income', label: 'درآمدها (ورودی)' },
+              ] as const
             ).map((tab) => (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setPersonFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  personFilter === tab.id
+                onClick={() => setTypeFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                  typeFilter === tab.id
                     ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
@@ -856,29 +1060,39 @@ export const HomeView: React.FC<HomeViewProps> = ({
             ))}
           </div>
 
-          {/* Recorded By Filter */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
-            {(
-              [
-                { id: 'all', label: 'ثبت: هر دو' },
-                { id: 'hootan', label: `ثبت: ${settings.hootanName}` },
-                { id: 'fatemeh', label: `ثبت: ${settings.fatemehName}` },
-              ] as { id: 'all' | 'hootan' | 'fatemeh'; label: string }[]
-            ).map((rec) => (
+          {/* Bank Card Filter */}
+          {cards.length > 1 && (
+            <div
+              data-no-swipe="true"
+              className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-x-auto max-w-full touch-pan-x"
+            >
               <button
-                key={rec.id}
                 type="button"
-                onClick={() => setRecorderFilter(rec.id)}
+                onClick={() => setCardFilter('all')}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  recorderFilter === rec.id
+                  cardFilter === 'all'
                     ? 'theme-bg text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
               >
-                {rec.label}
+                همه کارت‌ها
               </button>
-            ))}
-          </div>
+              {cards.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCardFilter(c.id)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    cardFilter === c.id
+                      ? 'theme-bg text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  {c.title}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Transaction List */}
@@ -888,14 +1102,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <CircularIcon name="archive" size="lg" color="#94a3b8" />
             </div>
             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-              تراکنشی با این مشخصات پیدا نشد
+              هنوز تراکنشی ثبت نشده است
             </p>
             <button
               type="button"
               onClick={onAddTransaction}
-              className="px-4 py-2 rounded-xl theme-bg text-white text-xs font-bold cursor-pointer"
+              className="px-4 py-2 rounded-xl theme-bg text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
             >
-              ثبت اولین تراکنش
+              <Plus size={14} strokeWidth={2.5} />
+              <span>ثبت اولین تراکنش</span>
             </button>
           </div>
         ) : (
@@ -905,17 +1120,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
               const sub = cat?.subCategories.find((s) => s.id === tx.subCategoryId);
               const card = cards.find((c) => c.id === tx.cardId);
               const bank = card ? IRANIAN_BANKS[card.bankId] : null;
-
-              const spentByLabel =
-                tx.spentBy === 'hootan'
-                  ? settings.hootanName
-                  : tx.spentBy === 'fatemeh'
-                  ? settings.fatemehName
-                  : settings.sharedLabel;
-
-              const recordedByLabel =
-                tx.recordedBy === 'hootan' ? settings.hootanName : settings.fatemehName;
-
               const txTags = tags.filter((t) => tx.tags.includes(t.id));
 
               return (
@@ -937,7 +1141,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         </h4>
                       </div>
 
-                      {/* Zero-Pill Metadata Discipline: Clean unboxed text with · separators */}
                       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 mt-1">
                         <span className="font-semibold text-slate-700 dark:text-slate-300">
                           {cat?.name || 'سایر'}
@@ -948,21 +1151,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             <span>{sub.name}</span>
                           </>
                         )}
-                        <span aria-hidden="true">·</span>
-                        <span>
-                          {tx.type === 'expense' ? 'خرج:' : 'درآمد:'} {spentByLabel}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span>ثبت: {recordedByLabel}</span>
-                        {bank && (
+                        {card && (
                           <>
                             <span aria-hidden="true">·</span>
-                            <span>{bank.name}</span>
+                            <span>
+                              {card.title} {bank ? `(${bank.name})` : ''}
+                            </span>
                           </>
                         )}
                       </div>
 
-                      {/* Date, Time & Tags inline */}
                       <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400 dark:text-slate-500 mt-1 tabular-nums">
                         <span>{formatJalaliReadable(tx.jalaliDate)}</span>
                         <span aria-hidden="true">·</span>

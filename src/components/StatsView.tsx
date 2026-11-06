@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AppState, PersonId } from '../types';
+import { AppState } from '../types';
 import {
   formatMoney,
   toPersianDigits,
@@ -8,6 +8,7 @@ import {
 } from '../utils/persian';
 import { CircularIcon } from './CircularIcon';
 import { BankLogoVector, IRANIAN_BANKS } from '../utils/iranianBanks';
+import { ArrowLeft } from 'lucide-react';
 
 interface StatsViewProps {
   state: AppState;
@@ -25,17 +26,17 @@ export const StatsView: React.FC<StatsViewProps> = ({
     new Set(transactions.map((t) => getMonthKey(t.jalaliDate)))
   ).sort((a, b) => b.localeCompare(a));
 
-  const latestMonthKey = availableMonths[0] || '1403/08';
+  const latestMonthKey = availableMonths[0] || 'all';
 
   const [selectedMonth, setSelectedMonth] = useState<string>(latestMonthKey);
-  const [selectedPerson, setSelectedPerson] = useState<'all' | PersonId>('all');
+  const [selectedCardId, setSelectedCardId] = useState<string>('all');
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
 
   const filteredTxs = transactions.filter((tx) => {
     if (selectedMonth !== 'all' && getMonthKey(tx.jalaliDate) !== selectedMonth) {
       return false;
     }
-    if (selectedPerson !== 'all' && tx.spentBy !== selectedPerson) {
+    if (selectedCardId !== 'all' && tx.cardId !== selectedCardId) {
       return false;
     }
     return true;
@@ -46,25 +47,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
   const totalExpense = expenses.reduce((sum, t) => sum + t.amount, 0);
   const totalIncome = incomes.reduce((sum, t) => sum + t.amount, 0);
-
-  // Person comparison on filtered month (ignoring selectedPerson filter for comparison chart)
-  const monthTxs = transactions.filter((tx) =>
-    selectedMonth === 'all' ? true : getMonthKey(tx.jalaliDate) === selectedMonth
-  );
-  const hootanSpent = monthTxs
-    .filter((t) => t.type === 'expense' && t.spentBy === 'hootan')
-    .reduce((s, t) => s + t.amount, 0);
-  const fatemehSpent = monthTxs
-    .filter((t) => t.type === 'expense' && t.spentBy === 'fatemeh')
-    .reduce((s, t) => s + t.amount, 0);
-  const sharedSpent = monthTxs
-    .filter((t) => t.type === 'expense' && t.spentBy === 'shared')
-    .reduce((s, t) => s + t.amount, 0);
-  const totalMonthExpense = hootanSpent + fatemehSpent + sharedSpent;
-
-  // Recorder stats (ثبت توسط هوتن یا فاطمه)
-  const recordedByHootanCount = filteredTxs.filter((t) => t.recordedBy === 'hootan').length;
-  const recordedByFatemehCount = filteredTxs.filter((t) => t.recordedBy === 'fatemeh').length;
+  const netSavings = totalIncome - totalExpense;
 
   // Number of months multiplier when 'all' is selected for budget comparison
   const activeMonthsCount = Math.max(
@@ -107,7 +90,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
       const catAllTxs = allHistoricalExpenses.filter((t) => t.categoryId === cat.id);
       const totalCatHistorical = catAllTxs.reduce((s, t) => s + t.amount, 0);
 
-      // Group by month to compute weighted trend + historical monthly average
       const monthlyTotals = availableMonths.map((mKey) =>
         catAllTxs
           .filter((t) => getMonthKey(t.jalaliDate) === mKey)
@@ -118,7 +100,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
       const latestMonthSpent = monthlyTotals[0] || 0;
       const prevMonthSpent = monthlyTotals[1] ?? simpleAverage;
 
-      // Smart weighted estimation: 60% recent pattern + 40% historical average
       const estimatedNextMonth =
         totalHistoricalMonths > 1
           ? Math.round(latestMonthSpent * 0.6 + simpleAverage * 0.4)
@@ -223,7 +204,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
           <CircularIcon name="pie-chart" size="md" color="#8b5cf6" />
           <div>
             <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
-              آمارهای کلی، وضعیت بودجه و تخمین ماه آینده
+              آمارهای مالی، وضعیت بودجه و تخمین ماه آینده
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               پایش سقف بودجه دسته‌بندی‌ها، پیش‌بینی هوشمند مخارج ماه بعد و تحلیل ریزِ زیردسته‌ها
@@ -233,11 +214,17 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Month Filter */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+          <div
+            data-no-swipe="true"
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-x-auto max-w-full no-scrollbar touch-pan-x"
+          >
             <button
               type="button"
               onClick={() => setSelectedMonth('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer shrink-0 ${
                 selectedMonth === 'all'
                   ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-400'
@@ -261,30 +248,21 @@ export const StatsView: React.FC<StatsViewProps> = ({
             ))}
           </div>
 
-          {/* Person Filter */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
-            {(
-              [
-                { id: 'all', label: 'همه' },
-                { id: 'hootan', label: settings.hootanName },
-                { id: 'fatemeh', label: settings.fatemehName },
-                { id: 'shared', label: settings.sharedLabel },
-              ] as { id: 'all' | PersonId; label: string }[]
-            ).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setSelectedPerson(p.id)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
-                  selectedPerson === p.id
-                    ? 'theme-bg text-white'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          {/* Card Filter */}
+          {cards.length > 1 && (
+            <select
+              value={selectedCardId}
+              onChange={(e) => setSelectedCardId(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
+            >
+              <option value="all">همه کارت‌های بانکی</option>
+              {cards.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
@@ -315,20 +293,26 @@ export const StatsView: React.FC<StatsViewProps> = ({
         </div>
 
         <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 flex items-center gap-3.5">
-          <CircularIcon name="edit" size="md" color="#0ea5e9" />
+          <CircularIcon name="wallet" size="md" color="#0ea5e9" />
           <div>
             <span className="text-xs text-slate-500 dark:text-slate-400 block">
-              مشارکت در ثبت تراکنش‌ها
+              تراز خالص دوره (درآمد منهای خرج)
             </span>
-            <div className="text-xs font-extrabold text-slate-800 dark:text-slate-200 mt-1 tabular-nums">
-              {settings.hootanName}: {toPersianDigits(recordedByHootanCount)} ثبت ·{' '}
-              {settings.fatemehName}: {toPersianDigits(recordedByFatemehCount)} ثبت
-            </div>
+            <span
+              className={`text-lg sm:text-xl font-black tabular-nums ${
+                netSavings >= 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-rose-600 dark:text-rose-400'
+              }`}
+            >
+              {netSavings >= 0 ? '+' : ''}
+              {formatMoney(netSavings, true, settings.currencyUnit)}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* NEW SECTION 1: CATEGORY BUDGET PROGRESS BARS */}
+      {/* SECTION 1: CATEGORY BUDGET PROGRESS BARS */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -350,9 +334,10 @@ export const StatsView: React.FC<StatsViewProps> = ({
             <button
               type="button"
               onClick={onNavigateSettingsBudgets}
-              className="text-xs font-bold theme-text hover:underline cursor-pointer self-start sm:self-auto whitespace-nowrap"
+              className="text-xs font-bold theme-text hover:underline cursor-pointer self-start sm:self-auto whitespace-nowrap flex items-center gap-1"
             >
-              ویرایش سقف بودجه دسته‌ها در تنظیمات ←
+              <span>ویرایش سقف بودجه دسته‌ها در تنظیمات</span>
+              <ArrowLeft size={13} />
             </button>
           )}
         </div>
@@ -421,7 +406,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Progress Bar */}
                 <div className="w-full h-2.5 rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${barColorClass}`}
@@ -434,107 +418,108 @@ export const StatsView: React.FC<StatsViewProps> = ({
         </div>
       </div>
 
-      {/* NEW SECTION 2: NEXT MONTH EXPENSE ESTIMATION BASED ON HISTORICAL PATTERNS */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-          <div className="flex items-center gap-3">
-            <CircularIcon name="trending-up" size="md" color="#0ea5e9" />
-            <div>
-              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
-                تخمین هوشمند هزینه‌های ماه آینده (بر اساس الگوی تراکنش‌های گذشته)
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                محاسبه شده از روی میانگین و روند خرج‌کرد {toPersianDigits(totalHistoricalMonths)} ماه اخیر برای دسته‌بندی‌های اصلی
-              </p>
+      {/* SECTION 2: NEXT MONTH EXPENSE ESTIMATION */}
+      {nextMonthForecasts.length > 0 && (
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div className="flex items-center gap-3">
+              <CircularIcon name="trending-up" size="md" color="#0ea5e9" />
+              <div>
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                  تخمین هوشمند هزینه‌های ماه آینده
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  محاسبه شده از روی میانگین و روند خرج‌کرد {toPersianDigits(totalHistoricalMonths)} ماه اخیر
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-left shrink-0">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                مجموع تخمینی مخارج ماه آینده
+              </span>
+              <span className="text-sm sm:text-base font-black theme-text tabular-nums">
+                {formatMoney(totalEstimatedNextMonth, true, settings.currencyUnit)}
+              </span>
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-left shrink-0">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-              مجموع تخمینی مخارج ماه آینده
-            </span>
-            <span className="text-sm sm:text-base font-black theme-text tabular-nums">
-              {formatMoney(totalEstimatedNextMonth, true, settings.currencyUnit)}
-            </span>
-          </div>
-        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {nextMonthForecasts.map((f) => {
+              const exceedsBudget =
+                f.budgetLimit > 0 && f.estimatedNextMonth > f.budgetLimit;
+              return (
+                <div
+                  key={f.category.id}
+                  className="p-4 rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/25 flex flex-col justify-between space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <CircularIcon
+                        name={f.category.icon}
+                        color={f.category.color}
+                        size="sm"
+                      />
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                          {f.category.name}
+                        </h4>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                          میانگین ماهانه: {formatMoney(f.simpleAverage)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {nextMonthForecasts.map((f) => {
-            const exceedsBudget =
-              f.budgetLimit > 0 && f.estimatedNextMonth > f.budgetLimit;
-            return (
-              <div
-                key={f.category.id}
-                className="p-4 rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/25 flex flex-col justify-between space-y-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <CircularIcon
-                      name={f.category.icon}
-                      color={f.category.color}
-                      size="sm"
-                    />
-                    <div className="min-w-0">
-                      <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
-                        {f.category.name}
-                      </h4>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
-                        میانگین ماهانه: {formatMoney(f.simpleAverage)}
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 flex items-baseline justify-between">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      پیش‌بینی ماه بعد:
+                    </span>
+                    <div className="text-left tabular-nums">
+                      <span className="text-sm font-black text-slate-900 dark:text-white">
+                        {formatMoney(f.estimatedNextMonth)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 mr-1">
+                        {settings.currencyUnit}
                       </span>
                     </div>
                   </div>
-                </div>
 
-                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 flex items-baseline justify-between">
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    پیش‌بینی ماه بعد:
-                  </span>
-                  <div className="text-left tabular-nums">
-                    <span className="text-sm font-black text-slate-900 dark:text-white">
-                      {formatMoney(f.estimatedNextMonth)}
-                    </span>
-                    <span className="text-[10px] text-slate-400 mr-1">
-                      {settings.currencyUnit}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] tabular-nums">
-                  <span
-                    className={
-                      f.trendDelta > 0
-                        ? 'text-amber-600 dark:text-amber-400 font-semibold'
-                        : 'text-emerald-600 dark:text-emerald-400 font-semibold'
-                    }
-                  >
-                    {f.trendDelta > 0
-                      ? `روند افزایشی (+${formatMoney(f.trendDelta)})`
-                      : f.trendDelta < 0
-                      ? `روند کاهشی (${formatMoney(f.trendDelta)})`
-                      : 'روند ثابت'}
-                  </span>
-                  {f.budgetLimit > 0 && (
+                  <div className="flex items-center justify-between text-[11px] tabular-nums">
                     <span
                       className={
-                        exceedsBudget
-                          ? 'text-rose-500 font-bold'
-                          : 'text-slate-400'
+                        f.trendDelta > 0
+                          ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                          : 'text-emerald-600 dark:text-emerald-400 font-semibold'
                       }
                     >
-                      {exceedsBudget ? 'فراتر از بودجه' : 'در محدوده بودجه'}
+                      {f.trendDelta > 0
+                        ? `روند افزایشی (+${formatMoney(f.trendDelta)})`
+                        : f.trendDelta < 0
+                        ? `روند کاهشی (${formatMoney(f.trendDelta)})`
+                        : 'روند ثابت'}
                     </span>
-                  )}
+                    {f.budgetLimit > 0 && (
+                      <span
+                        className={
+                          exceedsBudget
+                            ? 'text-rose-500 font-bold'
+                            : 'text-slate-400'
+                        }
+                      >
+                        {exceedsBudget ? 'فراتر از بودجه' : 'در محدوده بودجه'}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main 2-Column Analytics: Category Donut + Detailed Subcategory Drilldown */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left: SVG Donut Chart & Person Share */}
         <div className="lg:col-span-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-6">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
@@ -593,7 +578,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
                 </div>
               </div>
 
-              {/* Legend */}
               <div className="w-full grid grid-cols-2 gap-2.5 mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
                 {categoryStats.map((item) => (
                   <div key={item.category.id} className="flex items-center justify-between text-xs">
@@ -615,160 +599,115 @@ export const StatsView: React.FC<StatsViewProps> = ({
               </div>
             </div>
           )}
-
-          {/* Couple Comparison Bar */}
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
-            <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-200">
-              مقایسه هزینه بین {settings.hootanName}، {settings.fatemehName} و {settings.sharedLabel}
-            </h4>
-            <div className="w-full h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
-              {totalMonthExpense > 0 && (
-                <>
-                  <div
-                    style={{ width: `${(hootanSpent / totalMonthExpense) * 100}%` }}
-                    className="bg-sky-500 h-full"
-                    title={settings.hootanName}
-                  />
-                  <div
-                    style={{ width: `${(fatemehSpent / totalMonthExpense) * 100}%` }}
-                    className="bg-pink-500 h-full"
-                    title={settings.fatemehName}
-                  />
-                  <div
-                    style={{ width: `${(sharedSpent / totalMonthExpense) * 100}%` }}
-                    className="bg-emerald-500 h-full"
-                    title={settings.sharedLabel}
-                  />
-                </>
-              )}
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-[11px] tabular-nums">
-              <div>
-                <span className="text-sky-500 font-bold block">{settings.hootanName}</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {formatMoney(hootanSpent)}
-                </span>
-              </div>
-              <div>
-                <span className="text-pink-500 font-bold block">{settings.fatemehName}</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {formatMoney(fatemehSpent)}
-                </span>
-              </div>
-              <div>
-                <span className="text-emerald-500 font-bold block">{settings.sharedLabel}</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {formatMoney(sharedSpent)}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Right: Detailed Category & Subcategory Drilldown */}
         <div className="lg:col-span-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-4">
           <div>
             <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
-              ریزِ مخارج به تفکیک دسته‌بندی عمومی و زیردسته‌ها
+              ریزِ مخارج به تفکیک دسته‌بندی و زیردسته‌ها
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              روی هر دسته‌بندی کلیک کنید تا آمار دسته‌بندی‌های ریزتر آن باز شود
+              روی هر دسته‌بندی کلیک کنید تا آمار زیردسته‌های آن باز شود
             </p>
           </div>
 
-          <div className="space-y-3">
-            {categoryStats.map((item) => {
-              const isExpanded =
-                expandedCategoryId === item.category.id || expandedCategoryId === null;
-              return (
-                <div
-                  key={item.category.id}
-                  className="rounded-2xl border border-slate-200/70 dark:border-slate-800 p-4 transition-all"
-                >
+          {categoryStats.length === 0 ? (
+            <div className="py-10 text-center text-xs text-slate-400">
+              هنوز هزینه‌ای در این دوره ثبت نشده است.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {categoryStats.map((item) => {
+                const isExpanded =
+                  expandedCategoryId === item.category.id || expandedCategoryId === null;
+                return (
                   <div
-                    onClick={() =>
-                      setExpandedCategoryId(
-                        expandedCategoryId === item.category.id ? '' : item.category.id
-                      )
-                    }
-                    className="flex items-center justify-between gap-3 cursor-pointer"
+                    key={item.category.id}
+                    className="rounded-2xl border border-slate-200/70 dark:border-slate-800 p-4 transition-all"
                   >
-                    <div className="flex items-center gap-3">
-                      <CircularIcon
-                        name={item.category.icon}
-                        color={item.category.color}
-                        size="md"
-                      />
-                      <div>
-                        <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                          {item.category.name}
-                        </h4>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                          {toPersianDigits(item.count)} تراکنش · {toPersianDigits(item.percentage)}٪ از کل مخارج
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="text-left tabular-nums">
-                      <div className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
-                        {formatMoney(item.amount)}
-                      </div>
-                      <span className="text-[11px] text-slate-400">{settings.currencyUnit}</span>
-                    </div>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 mt-3 overflow-hidden">
                     <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${item.percentage}%`,
-                        backgroundColor: item.category.color,
-                      }}
-                    />
-                  </div>
-
-                  {/* Subcategories Breakdown */}
-                  {isExpanded && item.subStats.length > 0 && (
-                    <div className="mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
-                      {item.subStats.map((sub) => (
-                        <div
-                          key={sub.id}
-                          className="flex items-center justify-between text-xs py-1 px-2 rounded-xl bg-slate-50 dark:bg-slate-800/50"
-                        >
-                          <div className="flex items-center gap-2">
-                            <CircularIcon
-                              name={sub.icon || item.category.icon}
-                              color={item.category.color}
-                              size="xs"
-                            />
-                            <span className="font-semibold text-slate-700 dark:text-slate-300">
-                              {sub.name}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 tabular-nums">
-                            <span className="font-bold text-slate-900 dark:text-white">
-                              {formatMoney(sub.amount)}
-                            </span>
-                            <span className="text-slate-400">·</span>
-                            <span className="text-slate-500 dark:text-slate-400">
-                              {toPersianDigits(sub.percentage)}٪
-                            </span>
-                          </div>
+                      onClick={() =>
+                        setExpandedCategoryId(
+                          expandedCategoryId === item.category.id ? '' : item.category.id
+                        )
+                      }
+                      className="flex items-center justify-between gap-3 cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <CircularIcon
+                          name={item.category.icon}
+                          color={item.category.color}
+                          size="md"
+                        />
+                        <div>
+                          <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                            {item.category.name}
+                          </h4>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                            {toPersianDigits(item.count)} تراکنش · {toPersianDigits(item.percentage)}٪ از کل مخارج
+                          </span>
                         </div>
-                      ))}
+                      </div>
+
+                      <div className="text-left tabular-nums">
+                        <div className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                          {formatMoney(item.amount)}
+                        </div>
+                        <span className="text-[11px] text-slate-400">{settings.currencyUnit}</span>
+                      </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+
+                    <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 mt-3 overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${item.percentage}%`,
+                          backgroundColor: item.category.color,
+                        }}
+                      />
+                    </div>
+
+                    {isExpanded && item.subStats.length > 0 && (
+                      <div className="mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
+                        {item.subStats.map((sub) => (
+                          <div
+                            key={sub.id}
+                            className="flex items-center justify-between text-xs py-1 px-2 rounded-xl bg-slate-50 dark:bg-slate-800/50"
+                          >
+                            <div className="flex items-center gap-2">
+                              <CircularIcon
+                                name={sub.icon || item.category.icon}
+                                color={item.category.color}
+                                size="xs"
+                              />
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                {sub.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 tabular-nums">
+                              <span className="font-bold text-slate-900 dark:text-white">
+                                {formatMoney(sub.amount)}
+                              </span>
+                              <span className="text-slate-400">·</span>
+                              <span className="text-slate-500 dark:text-slate-400">
+                                {toPersianDigits(sub.percentage)}٪
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Bottom Row: Tags Analytics & Bank Card Performance */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Tags Breakdown */}
         <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-4">
           <div className="flex items-center gap-2.5">
             <CircularIcon name="tag" size="sm" color="#f59e0b" />
@@ -783,31 +722,36 @@ export const StatsView: React.FC<StatsViewProps> = ({
           </div>
 
           <div className="space-y-2.5">
-            {tagStats.map((item) => (
-              <div
-                key={item.tag.id}
-                className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50"
-              >
-                <div className="flex items-center gap-2.5">
-                  <CircularIcon name="tag" size="xs" color={item.tag.color} />
-                  <div>
-                    <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200">
-                      #{item.tag.name}
-                    </span>
-                    <span className="text-[11px] text-slate-500 block tabular-nums">
-                      {toPersianDigits(item.count)} مورد استفاده
-                    </span>
+            {tagStats.length === 0 ? (
+              <p className="text-xs text-slate-400 py-4 text-center">
+                هنوز تگی روی تراکنش‌ها ثبت نشده است.
+              </p>
+            ) : (
+              tagStats.map((item) => (
+                <div
+                  key={item.tag.id}
+                  className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <CircularIcon name="tag" size="xs" color={item.tag.color} />
+                    <div>
+                      <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200">
+                        #{item.tag.name}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block tabular-nums">
+                        {toPersianDigits(item.count)} مورد استفاده
+                      </span>
+                    </div>
                   </div>
+                  <span className="text-xs font-extrabold text-slate-900 dark:text-white tabular-nums">
+                    {formatMoney(item.amount, true, settings.currencyUnit)}
+                  </span>
                 </div>
-                <span className="text-xs font-extrabold text-slate-900 dark:text-white tabular-nums">
-                  {formatMoney(item.amount, true, settings.currencyUnit)}
-                </span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
-        {/* Cards Usage Breakdown */}
         <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-4">
           <div className="flex items-center gap-2.5">
             <CircularIcon name="credit-card" size="sm" color="#10b981" />
@@ -816,7 +760,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
                 گردش مالی هر کارت بانکی
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                میزان ورودی و خروجی ثبت شده روی کارت‌ها
+                میزان ورودی و خروجی ثبت شده روی کارت‌های شما
               </p>
             </div>
           </div>
