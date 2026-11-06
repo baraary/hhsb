@@ -5,9 +5,9 @@
       "amount": 66070,
       "type": "expense",
       "categoryId": "cat_home",
-      "subCategoryId": "sub_rent",
+      "subCategoryId": "sub_bills",
       "tags": [],
-      "spentBy": "hootan",
+      "spentBy": "shared",
       "recordedBy": "hootan",
       "cardId": "card_1793900324846",
       "jalaliDate": "1405/08/15",
@@ -457,7 +457,7 @@
     "sms_57329b9",
     "sms_996e970c"
   ],
-  "updatedAt": 1793969813624,
+  "updatedAt": 1793969855337,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
@@ -475,7 +475,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793969814439
+      "lastSyncedAt": 1793969856152
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
