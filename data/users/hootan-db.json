@@ -56,6 +56,17 @@
       "cardColorTheme": "auto",
       "patternId": "crystal_lattice",
       "id": "card_1793993877809"
+    },
+    {
+      "title": "ملت ۲",
+      "bankId": "mellat",
+      "cardNumber": "6104331016334808",
+      "shebaNumber": "IR920120010000002806013990",
+      "initialBalance": 31415,
+      "expiryDate": "06/05",
+      "cardColorTheme": "auto",
+      "patternId": "lotus_mandala",
+      "id": "card_1793993940389"
     }
   ],
   "categories": [
@@ -362,7 +373,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793993877809,
+  "updatedAt": 1793993940389,
   "settings": {
     "userName": "هوتن",
     "hootanName": "هوتن",
@@ -381,7 +392,7 @@
       "branch": "main",
       "filePath": "data/users/hootan-db.json",
       "token": "",
-      "lastSyncedAt": 1793993878620
+      "lastSyncedAt": 1793993941199
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f",
