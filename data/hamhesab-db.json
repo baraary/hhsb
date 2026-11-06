@@ -216,6 +216,16 @@
       "initialBalance": 8845,
       "expiryDate": "10/07",
       "id": "card_1793970470621"
+    },
+    {
+      "title": "ملت",
+      "bankId": "mellat",
+      "cardNumber": "6104331070301131",
+      "shebaNumber": "IR910120010000003008649045",
+      "owner": "fatemeh",
+      "initialBalance": 52000,
+      "expiryDate": "09/06",
+      "id": "card_1793970667200"
     }
   ],
   "categories": [
@@ -571,13 +581,13 @@
     "sms_f68d3337",
     "sms_bef2f190"
   ],
-  "updatedAt": 1793970593878,
+  "updatedAt": 1793970667200,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
     "sharedLabel": "مشترک",
     "currencyUnit": "تومان",
-    "darkMode": true,
+    "darkMode": false,
     "themeMode": "system",
     "colorTheme": "turquoise",
     "pinCode": "",
@@ -589,7 +599,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793970594687
+      "lastSyncedAt": 1793970668009
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
