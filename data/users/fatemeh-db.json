@@ -14,7 +14,7 @@
       "id": "card_1793987187281"
     },
     {
-      "title": "بانک قرض‌الحسنه مهر ایران",
+      "title": "مهر",
       "bankId": "mehr_iran",
       "cardNumber": "6063731263252935",
       "shebaNumber": "IR240600000000300344319345",
@@ -324,7 +324,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793987332811,
+  "updatedAt": 1793987348868,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -343,7 +343,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793987335165
+      "lastSyncedAt": 1793987351157
     }
   },
   "usersRegistry": [
