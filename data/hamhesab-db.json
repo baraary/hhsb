@@ -2,6 +2,23 @@
   "transactions": [
     {
       "title": "خرید کارتی (بانک رفاه)",
+      "amount": 324564,
+      "type": "expense",
+      "categoryId": "cat_groceries",
+      "subCategoryId": "sub_supermarket",
+      "tags": [],
+      "spentBy": "hootan",
+      "recordedBy": "hootan",
+      "cardId": "card_1793900324846",
+      "jalaliDate": "1405/08/15",
+      "time": "10:14",
+      "note": "بانک رفاه حساب386121254 خرید3,245,640- مانده104,841,143 08/15-10:14",
+      "smsHash": "sms_57329b9",
+      "id": "tx_1793969697642_0",
+      "createdAt": 1793969697642
+    },
+    {
+      "title": "خرید کارتی (بانک رفاه)",
       "amount": 1307224,
       "type": "expense",
       "categoryId": "cat_groceries",
@@ -419,9 +436,10 @@
     "rem_3"
   ],
   "importedSmsHashes": [
-    "sms_c1040c42"
+    "sms_c1040c42",
+    "sms_57329b9"
   ],
-  "updatedAt": 1793969632129,
+  "updatedAt": 1793969697642,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
@@ -439,7 +457,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793969632952
+      "lastSyncedAt": 1793969698475
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
