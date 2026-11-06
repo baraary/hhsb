@@ -12,6 +12,17 @@
       "cardColorTheme": "auto",
       "patternId": "topographic",
       "id": "card_1793987187281"
+    },
+    {
+      "title": "بانک قرض‌الحسنه مهر ایران",
+      "bankId": "mehr_iran",
+      "cardNumber": "6063731263252935",
+      "shebaNumber": "IR240600000000300344319345",
+      "initialBalance": 597850,
+      "expiryDate": "09/06",
+      "cardColorTheme": "pastel_mint",
+      "patternId": "japanese_seigaiha",
+      "id": "card_1793987262928"
     }
   ],
   "categories": [
@@ -313,7 +324,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793987187281,
+  "updatedAt": 1793987262928,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -332,7 +343,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793987252081
+      "lastSyncedAt": 1793987263736
     }
   },
   "usersRegistry": [
