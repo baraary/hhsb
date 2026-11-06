@@ -363,6 +363,18 @@
   ],
   "reminders": [
     {
+      "title": "قسط ۵٠ ملی",
+      "amount": 3125000,
+      "dueDate": "1405/08/03",
+      "category": "installment",
+      "person": "fatemeh",
+      "isPaid": false,
+      "recurrence": "monthly",
+      "totalInstallments": 15,
+      "paidInstallments": 0,
+      "id": "rem_1793988764615"
+    },
+    {
       "title": "وام ٢٠٠ تومنی ملی",
       "amount": 7741900,
       "dueDate": "1405/08/16",
@@ -381,7 +393,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793988663680,
+  "updatedAt": 1793988764615,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -400,7 +412,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793988763980
+      "lastSyncedAt": 1793988765420
     }
   },
   "usersRegistry": [
