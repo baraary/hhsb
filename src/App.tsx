@@ -222,12 +222,14 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [syncErrorMessage, setSyncErrorMessage] = useState<string>('');
 
-  // Per-User PIN Lock State (Unlocked within current session once verified)
-  const [isUnlocked, setIsUnlocked] = useState<boolean>(true);
+  // CRITICAL SECURITY: Always start locked (false) when opening the link!
+  // Nobody can see or enter any account without passing the Login/PIN gate first.
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
+  const [isInitialRemoteCheckDone, setIsInitialRemoteCheckDone] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<boolean>(false);
 
-  // Mandatory First-Time PIN Setup State (if current account has no PIN yet)
+  // Mandatory First-Time PIN Setup State (if current account has no PIN on device or GitHub yet)
   const [firstTimePinDraft, setFirstTimePinDraft] = useState<string>('');
   const [firstTimePinError, setFirstTimePinError] = useState<string>('');
 
@@ -307,137 +309,6 @@ export default function App() {
     [users]
   );
 
-  // Request switching to another user account — ALWAYS opens the PIN verification modal first!
-  const handleRequestSwitchUser = useCallback(
-    async (targetUserId: string) => {
-      if (targetUserId === activeUserId && isUnlocked) {
-        setIsUserSwitcherOpen(false);
-        return;
-      }
-      const targetUser = users.find((u) => u.id === targetUserId);
-      if (!targetUser) return;
-
-      setSwitchTargetUserId(targetUserId);
-      setSwitchPinInput('');
-      setSwitchPinError('');
-      setRemoteTargetPin(null);
-      setIsUserSwitcherOpen(false);
-
-      // Also check remote GitHub file for the target user so their latest PIN set on their own phone is enforced!
-      setIsCheckingRemotePin(true);
-      try {
-        const targetLocalState = loadIsolatedUserState(targetUser);
-        const queryState: AppState = {
-          ...targetLocalState,
-          settings: {
-            ...targetLocalState.settings,
-            githubSync: {
-              ...targetLocalState.settings.githubSync!,
-              repoOwner:
-                state.settings.githubSync?.repoOwner ||
-                targetLocalState.settings.githubSync?.repoOwner ||
-                detectGitHubPagesRepo().repoOwner,
-              repoName:
-                state.settings.githubSync?.repoName ||
-                targetLocalState.settings.githubSync?.repoName ||
-                detectGitHubPagesRepo().repoName,
-              token:
-                state.settings.githubSync?.token ||
-                targetLocalState.settings.githubSync?.token ||
-                '',
-              filePath: `data/users/${targetUser.id}-db.json`,
-            },
-          },
-        };
-        const ghPull = await pullStateFromGitHubDirect(queryState);
-        if (ghPull.ok && ghPull.remoteState?.settings?.pinCode) {
-          const rPin = ghPull.remoteState.settings.pinCode;
-          setRemoteTargetPin(rPin);
-          setUsers((prev) =>
-            prev.map((u) => (u.id === targetUser.id ? { ...u, pinCode: rPin } : u))
-          );
-          // Cache remote state for target user in localStorage
-          localStorage.setItem(
-            getUserStorageKey(targetUser.id),
-            JSON.stringify({
-              ...targetLocalState,
-              ...ghPull.remoteState,
-              userId: targetUser.id,
-            })
-          );
-        }
-      } catch {
-        // Offline fallback uses local PIN
-      } finally {
-        setIsCheckingRemotePin(false);
-      }
-    },
-    [activeUserId, isUnlocked, users, state.settings.githubSync]
-  );
-
-  // Finalize switching user ONLY after PIN is verified
-  const executeVerifiedSwitchUser = (targetUserId: string, newPinIfFirstTime?: string) => {
-    const targetUser = users.find((u) => u.id === targetUserId);
-    if (!targetUser) return;
-
-    hasUserEditedRef.current = Boolean(newPinIfFirstTime);
-    const loadedState = loadIsolatedUserState(targetUser);
-    if (newPinIfFirstTime) {
-      loadedState.settings.pinCode = newPinIfFirstTime;
-      loadedState.updatedAt = Date.now();
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === targetUser.id ? { ...u, pinCode: newPinIfFirstTime } : u
-        )
-      );
-    }
-
-    setActiveUserId(targetUser.id);
-    setState(loadedState);
-    setPinInput('');
-    setPinError(false);
-    setIsUnlocked(true);
-    setSwitchTargetUserId(null);
-    setSwitchPinInput('');
-    setSwitchPinError('');
-    setIsUserSwitcherOpen(false);
-  };
-
-  // Create a brand new isolated user account (Restricted strictly to Hootan - primary admin)
-  const handleCreateUser = (name: string, initialPin?: string) => {
-    if (activeUserId !== 'hootan') return;
-    const cleanName = name.trim();
-    const cleanPin = toEnglishDigits(initialPin || '').replace(/\D/g, '').slice(0, 4);
-    if (!cleanName || cleanPin.length !== 4) return;
-
-    const newId = `user_${Date.now()}`;
-    const newUser: UserAccount = {
-      id: newId,
-      name: cleanName,
-      avatarColor: AVATAR_PALETTE[users.length % AVATAR_PALETTE.length],
-      createdAt: Date.now(),
-      pinCode: cleanPin,
-    };
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-
-    const freshState = loadIsolatedUserState(newUser);
-    freshState.settings.pinCode = cleanPin;
-    localStorage.setItem(getUserStorageKey(newId), JSON.stringify(freshState));
-
-    // Keep Hootan in his own admin account and show a confirmation toast
-    setUserCreatedToast(`حساب مستقل «${cleanName}» با رمز ۴ رقمی ساخته شد.`);
-    setTimeout(() => setUserCreatedToast(''), 4000);
-  };
-
-  const handleDeleteUser = (userIdToDelete: string) => {
-    if (activeUserId !== 'hootan') return;
-    if (users.length <= 1 || userIdToDelete === 'hootan') return;
-    const remaining = users.filter((u) => u.id !== userIdToDelete);
-    setUsers(remaining);
-    localStorage.removeItem(getUserStorageKey(userIdToDelete));
-  };
-
   // Push current user's state to their isolated GitHub file: data/users/${activeUserId}-db.json
   const pushStateToRemote = useCallback(
     async (currentState: AppState): Promise<{ ok: boolean; error?: string }> => {
@@ -492,18 +363,51 @@ export default function App() {
         },
       };
 
+      let recoveredLegacyToken = '';
+      if (!state.settings.githubSync?.token?.trim()) {
+        const legacyQuery: AppState = {
+          ...state,
+          settings: {
+            ...state.settings,
+            githubSync: {
+              ...state.settings.githubSync!,
+              filePath: 'data/hamhesab-db.json',
+            },
+          },
+        };
+        const legacyPull = await pullStateFromGitHubDirect(legacyQuery);
+        if (legacyPull.ok && legacyPull.recoveredToken) {
+          recoveredLegacyToken = legacyPull.recoveredToken;
+        }
+      }
+
       const ghPull = await pullStateFromGitHubDirect(stateToQuery);
       if (ghPull.ok && ghPull.remoteState) {
         const remoteData = ghPull.remoteState;
         if (remoteData.userId && remoteData.userId !== activeUserId) {
+          setIsInitialRemoteCheckDone(true);
           return;
         }
+        const remotePin = remoteData.settings?.pinCode || '';
+        if (remotePin) {
+          setUsers((prev) =>
+            prev.map((u) =>
+              u.id === activeUserId ? { ...u, pinCode: remotePin } : u
+            )
+          );
+        }
+
         setState((prev) => {
           const remoteUpdated = remoteData.updatedAt || 0;
           const localUpdated = prev.updatedAt || 0;
           const autoRepo = detectGitHubPagesRepo();
           const bestToken =
-            prev.settings.githubSync?.token?.trim() || ghPull.recoveredToken || '';
+            prev.settings.githubSync?.token?.trim() ||
+            ghPull.recoveredToken ||
+            recoveredLegacyToken ||
+            '';
+          const effectivePin =
+            remoteData.settings?.pinCode || prev.settings.pinCode || '';
 
           if (remoteUpdated > localUpdated) {
             isApplyingRemoteRef.current = true;
@@ -514,7 +418,7 @@ export default function App() {
               settings: {
                 ...prev.settings,
                 ...(remoteData.settings || {}),
-                pinCode: remoteData.settings?.pinCode || prev.settings.pinCode || '',
+                pinCode: effectivePin,
                 githubSync: {
                   ...prev.settings.githubSync!,
                   ...(remoteData.settings?.githubSync || {}),
@@ -535,37 +439,44 @@ export default function App() {
               },
             };
           }
+
+          // Even if localUpdated >= remoteUpdated, ALWAYS preserve remote PIN & recovered token!
+          if (
+            (effectivePin && prev.settings.pinCode !== effectivePin) ||
+            (bestToken && prev.settings.githubSync?.token !== bestToken)
+          ) {
+            return {
+              ...prev,
+              settings: {
+                ...prev.settings,
+                pinCode: effectivePin,
+                githubSync: {
+                  ...prev.settings.githubSync!,
+                  token: bestToken,
+                },
+              },
+            };
+          }
+
           return prev;
         });
         setSyncStatus('synced');
-      } else if (!state.settings.githubSync?.token?.trim()) {
-        // Fallback: check legacy data/hamhesab-db.json once to recover syncVault token if needed
-        const legacyQuery: AppState = {
-          ...state,
+      } else if (recoveredLegacyToken) {
+        setState((prev) => ({
+          ...prev,
           settings: {
-            ...state.settings,
+            ...prev.settings,
             githubSync: {
-              ...state.settings.githubSync!,
-              filePath: 'data/hamhesab-db.json',
+              ...prev.settings.githubSync!,
+              token: prev.settings.githubSync?.token || recoveredLegacyToken,
             },
           },
-        };
-        const legacyPull = await pullStateFromGitHubDirect(legacyQuery);
-        if (legacyPull.ok && legacyPull.recoveredToken) {
-          setState((prev) => ({
-            ...prev,
-            settings: {
-              ...prev.settings,
-              githubSync: {
-                ...prev.settings.githubSync!,
-                token: prev.settings.githubSync?.token || legacyPull.recoveredToken || '',
-              },
-            },
-          }));
-        }
+        }));
       }
     } catch {
       // Offline mode continues using LocalStorage seamlessly
+    } finally {
+      setIsInitialRemoteCheckDone(true);
     }
   }, [state, activeUserId]);
 
@@ -574,6 +485,163 @@ export default function App() {
     const interval = setInterval(pullStateFromRemote, 15000);
     return () => clearInterval(interval);
   }, [pullStateFromRemote]);
+
+  // Select a user on the Lock/Login Screen (stays locked until that user's PIN is entered!)
+  const handleSelectUserOnLoginScreen = async (targetUserId: string) => {
+    const targetUser = users.find((u) => u.id === targetUserId);
+    if (!targetUser) return;
+
+    setIsUnlocked(false);
+    setPinInput('');
+    setPinError(false);
+    setFirstTimePinDraft('');
+    setFirstTimePinError('');
+    setIsInitialRemoteCheckDone(false);
+
+    const loadedState = loadIsolatedUserState(targetUser);
+    setActiveUserId(targetUser.id);
+    setState(loadedState);
+  };
+
+  // Request switching to another user account while inside the app — ALWAYS opens the PIN verification modal first!
+  const handleRequestSwitchUser = useCallback(
+    async (targetUserId: string) => {
+      if (targetUserId === activeUserId && isUnlocked) {
+        setIsUserSwitcherOpen(false);
+        return;
+      }
+      const targetUser = users.find((u) => u.id === targetUserId);
+      if (!targetUser) return;
+
+      setSwitchTargetUserId(targetUserId);
+      setSwitchPinInput('');
+      setSwitchPinError('');
+      setRemoteTargetPin(null);
+      setIsUserSwitcherOpen(false);
+
+      // Check remote GitHub file for the target user so their latest PIN is enforced!
+      setIsCheckingRemotePin(true);
+      try {
+        const targetLocalState = loadIsolatedUserState(targetUser);
+        const queryState: AppState = {
+          ...targetLocalState,
+          settings: {
+            ...targetLocalState.settings,
+            githubSync: {
+              ...targetLocalState.settings.githubSync!,
+              repoOwner:
+                state.settings.githubSync?.repoOwner ||
+                targetLocalState.settings.githubSync?.repoOwner ||
+                detectGitHubPagesRepo().repoOwner,
+              repoName:
+                state.settings.githubSync?.repoName ||
+                targetLocalState.settings.githubSync?.repoName ||
+                detectGitHubPagesRepo().repoName,
+              token:
+                state.settings.githubSync?.token ||
+                targetLocalState.settings.githubSync?.token ||
+                '',
+              filePath: `data/users/${targetUser.id}-db.json`,
+            },
+          },
+        };
+        const ghPull = await pullStateFromGitHubDirect(queryState);
+        if (ghPull.ok && ghPull.remoteState?.settings?.pinCode) {
+          const rPin = ghPull.remoteState.settings.pinCode;
+          setRemoteTargetPin(rPin);
+          setUsers((prev) =>
+            prev.map((u) => (u.id === targetUser.id ? { ...u, pinCode: rPin } : u))
+          );
+          localStorage.setItem(
+            getUserStorageKey(targetUser.id),
+            JSON.stringify({
+              ...targetLocalState,
+              ...ghPull.remoteState,
+              userId: targetUser.id,
+            })
+          );
+        }
+      } catch {
+        // Offline fallback uses local PIN
+      } finally {
+        setIsCheckingRemotePin(false);
+      }
+    },
+    [activeUserId, isUnlocked, users, state.settings.githubSync]
+  );
+
+  // Finalize switching user ONLY after PIN is verified
+  const executeVerifiedSwitchUser = (targetUserId: string, newPinIfFirstTime?: string) => {
+    const targetUser = users.find((u) => u.id === targetUserId);
+    if (!targetUser) return;
+
+    hasUserEditedRef.current = Boolean(newPinIfFirstTime);
+    const loadedState = loadIsolatedUserState(targetUser);
+    if (newPinIfFirstTime) {
+      loadedState.settings.pinCode = newPinIfFirstTime;
+      loadedState.updatedAt = Date.now();
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === targetUser.id ? { ...u, pinCode: newPinIfFirstTime } : u
+        )
+      );
+      pushStateToRemote(loadedState);
+    }
+
+    setActiveUserId(targetUser.id);
+    setState(loadedState);
+    setPinInput('');
+    setPinError(false);
+    setIsUnlocked(true);
+    setSwitchTargetUserId(null);
+    setSwitchPinInput('');
+    setSwitchPinError('');
+    setIsUserSwitcherOpen(false);
+  };
+
+  // Create a brand new isolated user account (Restricted strictly to Hootan - primary admin)
+  const handleCreateUser = (name: string, initialPin?: string) => {
+    if (activeUserId !== 'hootan') return;
+    const cleanName = name.trim();
+    const cleanPin = toEnglishDigits(initialPin || '').replace(/\D/g, '').slice(0, 4);
+    if (!cleanName || cleanPin.length !== 4) return;
+
+    const newId = `user_${Date.now()}`;
+    const newUser: UserAccount = {
+      id: newId,
+      name: cleanName,
+      avatarColor: AVATAR_PALETTE[users.length % AVATAR_PALETTE.length],
+      createdAt: Date.now(),
+      pinCode: cleanPin,
+    };
+    const updatedUsers = [...users, newUser];
+    setUsers(updatedUsers);
+
+    const freshState = loadIsolatedUserState(newUser);
+    freshState.settings.pinCode = cleanPin;
+    freshState.updatedAt = Date.now();
+    localStorage.setItem(getUserStorageKey(newId), JSON.stringify(freshState));
+
+    // Also push the new user's initial PIN-protected file to GitHub if token is present
+    if (state.settings.githubSync?.token) {
+      freshState.settings.githubSync = {
+        ...state.settings.githubSync,
+        filePath: `data/users/${newId}-db.json`,
+      };
+      pushStateToGitHubDirect(freshState);
+    }
+
+    setUserCreatedToast(`حساب مستقل «${cleanName}» با رمز ۴ رقمی ساخته شد.`);
+    setTimeout(() => setUserCreatedToast(''), 4000);
+  };
+
+  const handleDeleteUser = (userIdToDelete: string) => {
+    if (activeUserId !== 'hootan') return;
+    if (users.length <= 1 || userIdToDelete === 'hootan') return;
+    const remaining = users.filter((u) => u.id !== userIdToDelete);
+    setUsers(remaining);
+    localStorage.removeItem(getUserStorageKey(userIdToDelete));
+  };
 
   // Debounced auto-push ONLY when the user has actually edited local state
   useEffect(() => {
@@ -609,7 +677,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!state.settings.autoCheckClipboardSms) return;
+    if (!state.settings.autoCheckClipboardSms || !isUnlocked) return;
     const handleFocus = async () => {
       try {
         const text = await navigator.clipboard.readText();
@@ -629,7 +697,7 @@ export default function App() {
     };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [state.settings.autoCheckClipboardSms, state.importedSmsHashes, state.transactions]);
+  }, [state.settings.autoCheckClipboardSms, state.importedSmsHashes, state.transactions, isUnlocked]);
 
   // Sync Dark Mode, Color Theme & Mobile Status Bar Theme-Color
   useEffect(() => {
@@ -893,11 +961,17 @@ export default function App() {
         )
       );
     }
-    setState((prev) => ({
-      ...prev,
-      updatedAt: Date.now(),
-      settings: { ...prev.settings, ...partial },
-    }));
+    setState((prev) => {
+      const nextState: AppState = {
+        ...prev,
+        updatedAt: Date.now(),
+        settings: { ...prev.settings, ...partial },
+      };
+      if (partial.pinCode) {
+        pushStateToRemote(nextState);
+      }
+      return nextState;
+    });
   };
 
   const handleAddReminder = (rem: Omit<DueReminder, 'id'>) => {
@@ -1056,7 +1130,6 @@ export default function App() {
 
   const currentUserName = state.settings.userName || activeUserObj.name || 'کاربر';
   const currentAccountPin = state.settings.pinCode || activeUserObj.pinCode || '';
-  const needsFirstTimePinSetup = !currentAccountPin;
 
   // Target user for the Pre-Switch Password Verification Modal
   const switchTargetUserObj = switchTargetUserId
@@ -1066,145 +1139,150 @@ export default function App() {
     ? remoteTargetPin || getStoredUserPin(switchTargetUserId)
     : '';
 
-  // Per-User PIN Lock Screen (When user locks their account or opens a locked session)
-  if (!isUnlocked && currentAccountPin) {
+  // ============================================================================
+  // FULL-SCREEN LOGIN & PIN GATE (Blocks 100% of access when opening the link!)
+  // ============================================================================
+  if (!isUnlocked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-4">
         <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 text-center space-y-5 shadow-2xl">
           <div className="flex justify-center">
-            <CircularIcon name="lock" size="xl" color="#10b981" variant="solid" />
+            <CircularIcon
+              name={currentAccountPin ? 'lock' : 'shield'}
+              size="xl"
+              color="#10b981"
+              variant="solid"
+            />
           </div>
-          <div>
-            <h1 className="text-lg font-black">
-              ورود به حساب شخصی «{currentUserName}»
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">
-              لطفاً رمز ۴ رقمی اختصاصی حساب «{currentUserName}» را وارد کنید
-            </p>
-          </div>
-          <input
-            type="password"
-            dir="ltr"
-            maxLength={4}
-            inputMode="numeric"
-            value={pinInput}
-            onChange={(e) => {
-              const val = toEnglishDigits(e.target.value).replace(/\D/g, '');
-              setPinInput(val);
-              setPinError(false);
-              if (val === currentAccountPin) {
-                setIsUnlocked(true);
-              } else if (val.length === 4) {
-                setPinError(true);
-              }
-            }}
-            placeholder="••••"
-            className="w-40 mx-auto block px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums"
-          />
-          {pinError && (
-            <p className="text-xs text-rose-400 font-bold">
-              رمز وارد شده اشتباه است. دسترسی مجاز نیست.
-            </p>
-          )}
 
-          {/* Switch to another user account (Still requires that user's PIN!) */}
-          <div className="pt-3 border-t border-slate-800">
-            <span className="text-[11px] text-slate-400 block mb-2">
-              ورود به حساب کاربری دیگر (نیازمند رمز اختصاصی آن حساب):
+          {/* Account Selector Tabs on Login Screen */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-bold text-slate-400 block">
+              انتخاب حساب کاربری برای ورود:
             </span>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              {users
-                .filter((u) => u.id !== activeUserId)
-                .map((u) => (
+              {users.map((u) => {
+                const isSelected = u.id === activeUserId;
+                return (
                   <button
                     key={u.id}
                     type="button"
-                    onClick={() => handleRequestSwitchUser(u.id)}
-                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 cursor-pointer flex items-center gap-1.5"
+                    onClick={() => handleSelectUserOnLoginScreen(u.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-extrabold cursor-pointer flex items-center gap-1.5 transition-all ${
+                      isSelected
+                        ? 'theme-bg text-white shadow-md ring-2 ring-white/25'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    }`}
                   >
-                    <Lock size={12} />
-                    <span>حساب {u.name}</span>
+                    <User size={13} />
+                    <span>{u.name}</span>
+                    {u.id === 'hootan' && <ShieldCheck size={12} className="opacity-85" />}
                   </button>
-                ))}
+                );
+              })}
             </div>
           </div>
-        </div>
 
-        {/* Render Pre-Switch Verification Modal even on Lock Screen if triggered */}
-        {switchTargetUserObj &&
-          typeof document !== 'undefined' &&
-          createPortal(
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-              <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center space-y-4 shadow-2xl">
-                <div className="flex justify-center">
-                  <CircularIcon name="lock" size="lg" color="#10b981" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                    ورود به حساب «{switchTargetUserObj.name}»
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    {isCheckingRemotePin
-                      ? 'در حال بررسی وضعیت امنیتی حساب...'
-                      : effectiveTargetPin
-                      ? `برای ورود به حساب «${switchTargetUserObj.name}»، رمز ۴ رقمی اختصاصی این حساب را وارد کنید:`
-                      : `برای ورود و فعال‌سازی امنیت حساب «${switchTargetUserObj.name}»، یک رمز ۴ رقمی برای آن تعیین کنید:`}
-                  </p>
-                </div>
-
-                <input
-                  type="password"
-                  dir="ltr"
-                  maxLength={4}
-                  inputMode="numeric"
-                  disabled={isCheckingRemotePin}
-                  value={switchPinInput}
-                  onChange={(e) => {
-                    const val = toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4);
-                    setSwitchPinInput(val);
-                    setSwitchPinError('');
-                    if (effectiveTargetPin && val.length === 4) {
-                      if (val === effectiveTargetPin) {
-                        executeVerifiedSwitchUser(switchTargetUserObj.id);
-                      } else {
-                        setSwitchPinError('رمز وارد شده اشتباه است! شما اجازه ورود به این حساب را ندارید.');
-                      }
-                    }
-                  }}
-                  placeholder="••••"
-                  className="w-40 mx-auto block px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums text-slate-900 dark:text-white"
-                />
-
-                {switchPinError && (
-                  <p className="text-xs text-rose-500 font-bold">{switchPinError}</p>
-                )}
-
-                {!effectiveTargetPin && !isCheckingRemotePin && (
-                  <button
-                    type="button"
-                    disabled={switchPinInput.length !== 4}
-                    onClick={() => {
-                      if (switchPinInput.length === 4) {
-                        executeVerifiedSwitchUser(switchTargetUserObj.id, switchPinInput);
-                      }
-                    }}
-                    className="w-full py-2.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer disabled:opacity-50"
-                  >
-                    ثبت رمز ۴ رقمی و ورود به حساب
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setSwitchTargetUserId(null)}
-                  className="w-full py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
-                >
-                  انصراف
-                </button>
+          {!isInitialRemoteCheckDone ? (
+            <div className="py-6 space-y-2">
+              <p className="text-xs font-bold text-slate-300">
+                در حال بررسی اطلاعات امنیتی حساب «{currentUserName}»...
+              </p>
+            </div>
+          ) : currentAccountPin ? (
+            /* Case A: Account has a 4-digit PIN — Require it to unlock! */
+            <div className="space-y-4">
+              <div>
+                <h1 className="text-base sm:text-lg font-black">
+                  ورود به حساب شخصی «{currentUserName}»
+                </h1>
+                <p className="text-xs text-slate-400 mt-1">
+                  لطفاً رمز ۴ رقمی اختصاصی حساب «{currentUserName}» را وارد کنید
+                </p>
               </div>
-            </div>,
-            document.body
+
+              <input
+                type="password"
+                dir="ltr"
+                maxLength={4}
+                inputMode="numeric"
+                autoFocus
+                value={pinInput}
+                onChange={(e) => {
+                  const val = toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4);
+                  setPinInput(val);
+                  setPinError(false);
+                  if (val === currentAccountPin) {
+                    setIsUnlocked(true);
+                  } else if (val.length === 4) {
+                    setPinError(true);
+                  }
+                }}
+                placeholder="••••"
+                className="w-44 mx-auto block px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums text-white"
+              />
+
+              {pinError && (
+                <p className="text-xs text-rose-400 font-bold">
+                  رمز وارد شده اشتباه است. بدون رمز اجازه ورود به حساب «{currentUserName}» وجود ندارد.
+                </p>
+              )}
+            </div>
+          ) : (
+            /* Case B: Account does not have a PIN yet — Must set a 4-digit PIN before entering */
+            <div className="space-y-4">
+              <div>
+                <h1 className="text-base font-black">
+                  تعیین رمز ۴ رقمی حساب «{currentUserName}»
+                </h1>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  برای قفل شدن حساب «{currentUserName}» و جلوگیری از ورود سایر کاربران با لینک، یک رمز ۴ رقمی تعیین کنید:
+                </p>
+              </div>
+
+              <input
+                type="text"
+                dir="ltr"
+                maxLength={4}
+                inputMode="numeric"
+                autoFocus
+                value={firstTimePinDraft}
+                onChange={(e) => {
+                  setFirstTimePinDraft(
+                    toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4)
+                  );
+                  setFirstTimePinError('');
+                }}
+                placeholder="مثلاً: 1370"
+                className="w-44 mx-auto block px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-center text-xl tracking-widest font-sans tabular-nums font-bold text-white"
+              />
+
+              {firstTimePinError && (
+                <p className="text-xs text-rose-400 font-bold">{firstTimePinError}</p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  const clean = toEnglishDigits(firstTimePinDraft)
+                    .replace(/\D/g, '')
+                    .slice(0, 4);
+                  if (clean.length !== 4) {
+                    setFirstTimePinError('رمز ورود باید دقیقاً ۴ رقم باشد.');
+                    return;
+                  }
+                  handleUpdateSettings({ pinCode: clean });
+                  setFirstTimePinDraft('');
+                  setIsUnlocked(true);
+                }}
+                className="w-full py-3 rounded-2xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Check size={15} strokeWidth={2.5} />
+                <span>ثبت رمز ۴ رقمی و ورود به حساب</span>
+              </button>
+            </div>
           )}
+        </div>
       </div>
     );
   }
@@ -1328,19 +1406,19 @@ export default function App() {
                   );
                 })}
 
-                {currentAccountPin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsUnlocked(false);
-                      setIsUserSwitcherOpen(false);
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-extrabold cursor-pointer flex items-center gap-1"
-                  >
-                    <Lock size={12} />
-                    <span>قفل کردن حساب فعلی</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPinInput('');
+                    setPinError(false);
+                    setIsUnlocked(false);
+                    setIsUserSwitcherOpen(false);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-extrabold cursor-pointer flex items-center gap-1"
+                >
+                  <Lock size={12} />
+                  <span>قفل کردن حساب / خروج</span>
+                </button>
               </div>
 
               {isAdminHootan ? (
@@ -1486,7 +1564,11 @@ export default function App() {
                 }}
                 onClearCurrentUserData={handleClearCurrentUserData}
                 onManualSyncNow={handleManualSyncNow}
-                onLockAppNow={() => setIsUnlocked(false)}
+                onLockAppNow={() => {
+                  setPinInput('');
+                  setPinError(false);
+                  setIsUnlocked(false);
+                }}
                 syncStatus={syncStatus}
                 syncErrorMessage={syncErrorMessage}
               />
@@ -1531,67 +1613,6 @@ export default function App() {
           })}
         </nav>
       </div>
-
-      {/* Mandatory First-Time PIN Setup Modal (Ensures Hootan & every user sets a 4-digit PIN immediately) */}
-      {needsFirstTimePinSetup &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-            <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center space-y-4 shadow-2xl">
-              <div className="flex justify-center">
-                <CircularIcon name="shield" size="lg" color="#10b981" />
-              </div>
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                  تعیین رمز ۴ رقمی اختصاصی حساب «{currentUserName}»
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
-                  برای اینکه هیچ کاربر دیگری نتواند بدون اجازه وارد اکانت شخصی شما شود، یک رمز ۴ رقمی برای حساب «{currentUserName}» انتخاب کنید:
-                </p>
-              </div>
-
-              <input
-                type="text"
-                dir="ltr"
-                maxLength={4}
-                inputMode="numeric"
-                value={firstTimePinDraft}
-                onChange={(e) => {
-                  setFirstTimePinDraft(
-                    toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4)
-                  );
-                  setFirstTimePinError('');
-                }}
-                placeholder="مثلاً: 1370"
-                className="w-44 mx-auto block px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center text-xl tracking-widest font-sans tabular-nums font-bold text-slate-900 dark:text-white"
-              />
-
-              {firstTimePinError && (
-                <p className="text-xs text-rose-500 font-bold">{firstTimePinError}</p>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  const clean = toEnglishDigits(firstTimePinDraft)
-                    .replace(/\D/g, '')
-                    .slice(0, 4);
-                  if (clean.length !== 4) {
-                    setFirstTimePinError('رمز ورود باید دقیقاً ۴ رقم باشد.');
-                    return;
-                  }
-                  handleUpdateSettings({ pinCode: clean });
-                  setFirstTimePinDraft('');
-                }}
-                className="w-full py-3 rounded-2xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-md flex items-center justify-center gap-1.5"
-              >
-                <Check size={15} strokeWidth={2.5} />
-                <span>ثبت رمز ۴ رقمی و قفل‌گذاری حساب</span>
-              </button>
-            </div>
-          </div>,
-          document.body
-        )}
 
       {/* Pre-Switch User Password Verification Modal (Blocks unauthorized switching into Hootan or any other account) */}
       {switchTargetUserObj &&
