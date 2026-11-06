@@ -512,6 +512,18 @@
   ],
   "reminders": [
     {
+      "title": "اجاره خانه",
+      "amount": 4500000,
+      "dueDate": "1405/08/15",
+      "category": "rent",
+      "person": "hootan",
+      "isPaid": false,
+      "recurrence": "monthly",
+      "totalInstallments": 10,
+      "paidInstallments": 0,
+      "id": "rem_1793970593878"
+    },
+    {
       "title": "قسط ملت",
       "amount": 3870900,
       "dueDate": "1405/09/25",
@@ -559,7 +571,7 @@
     "sms_f68d3337",
     "sms_bef2f190"
   ],
-  "updatedAt": 1793970542997,
+  "updatedAt": 1793970593878,
   "settings": {
     "hootanName": "هوتن",
     "fatemehName": "فاطمه",
@@ -577,7 +589,7 @@
       "branch": "main",
       "filePath": "data/hamhesab-db.json",
       "token": "",
-      "lastSyncedAt": 1793970555357
+      "lastSyncedAt": 1793970594687
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
