@@ -76,7 +76,7 @@
       "initialBalance": 92375,
       "expiryDate": "۱۰/۰۷",
       "cardColorTheme": "auto",
-      "patternId": "isometric_prism",
+      "patternId": "fibonacci_shells",
       "id": "card_1793994029936"
     }
   ],
@@ -384,7 +384,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793994029936,
+  "updatedAt": 1793994052520,
   "settings": {
     "userName": "هوتن",
     "hootanName": "هوتن",
@@ -403,7 +403,7 @@
       "branch": "main",
       "filePath": "data/users/hootan-db.json",
       "token": "",
-      "lastSyncedAt": 1793994030746
+      "lastSyncedAt": 1793994053330
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f",
