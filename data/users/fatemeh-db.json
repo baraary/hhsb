@@ -13,7 +13,7 @@
       "cardId": "card_1793987459688",
       "jalaliDate": "1405/08/16",
       "time": "23:36",
-      "note": "777.888.28572148.1 -81,016,200 08/16_23:35 مانده: 597,686,888",
+      "note": "برنج",
       "smsHash": "sms_18a07f3c",
       "id": "tx_1794082045401_0",
       "createdAt": 1794082045401
@@ -539,7 +539,7 @@
     "sms_1c0b3432",
     "sms_18a07f3c"
   ],
-  "updatedAt": 1794082045401,
+  "updatedAt": 1794082068197,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -558,7 +558,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794082046212
+      "lastSyncedAt": 1794082069000
     }
   },
   "usersRegistry": [
