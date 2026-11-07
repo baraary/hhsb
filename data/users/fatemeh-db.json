@@ -3,6 +3,23 @@
   "transactions": [
     {
       "title": "برداشت از بلوبانک",
+      "amount": 250000,
+      "type": "expense",
+      "categoryId": "cat_groceries",
+      "subCategoryId": "sub_fruit",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987187281",
+      "jalaliDate": "1405/08/16",
+      "time": "18:22",
+      "note": "بلو برداشت پول فاطمه عزیز، 2,500,000ریال از حساب شما پرید. موجودی: 25,697,312 ریال ۱۸:۲۲ ۱۴۰۵.۰۸.۱۶",
+      "smsHash": "sms_1c0b3432",
+      "id": "tx_1794076092560_0",
+      "createdAt": 1794076092560
+    },
+    {
+      "title": "برداشت از بلوبانک",
       "amount": 117000,
       "type": "expense",
       "categoryId": "cat_groceries",
@@ -501,9 +518,10 @@
   ],
   "importedSmsHashes": [
     "sms_9571578b",
-    "sms_fcf2f1b0"
+    "sms_fcf2f1b0",
+    "sms_1c0b3432"
   ],
-  "updatedAt": 1794076066565,
+  "updatedAt": 1794076092560,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -522,7 +540,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794076067371
+      "lastSyncedAt": 1794076093368
     }
   },
   "usersRegistry": [
