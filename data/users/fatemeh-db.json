@@ -6,7 +6,7 @@
       "amount": 117000,
       "type": "expense",
       "categoryId": "cat_groceries",
-      "subCategoryId": "sub_fruit",
+      "subCategoryId": "sub_supermarket",
       "tags": [],
       "spentBy": "fatemeh",
       "recordedBy": "fatemeh",
@@ -503,7 +503,7 @@
     "sms_9571578b",
     "sms_fcf2f1b0"
   ],
-  "updatedAt": 1794076024731,
+  "updatedAt": 1794076066565,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -522,7 +522,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794076025541
+      "lastSyncedAt": 1794076067371
     }
   },
   "usersRegistry": [
