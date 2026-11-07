@@ -2,6 +2,23 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "برداشت از بلوبانک",
+      "amount": 117000,
+      "type": "expense",
+      "categoryId": "cat_groceries",
+      "subCategoryId": "sub_fruit",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987187281",
+      "jalaliDate": "1405/08/16",
+      "time": "18:19",
+      "note": "بلو برداشت پول فاطمه عزیز، 1,170,000ریال از حساب شما پرید. موجودی: 28,197,312 ریال ۱۸:۱۹ ۱۴۰۵.۰۸.۱۶",
+      "smsHash": "sms_fcf2f1b0",
+      "id": "tx_1794076024730_0",
+      "createdAt": 1794076024730
+    },
+    {
       "title": "دستمزد علیرضا",
       "amount": 5500000,
       "type": "expense",
@@ -483,9 +500,10 @@
     "rem_3"
   ],
   "importedSmsHashes": [
-    "sms_9571578b"
+    "sms_9571578b",
+    "sms_fcf2f1b0"
   ],
-  "updatedAt": 1793989693266,
+  "updatedAt": 1794076024731,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -504,7 +522,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1793989755322
+      "lastSyncedAt": 1794076025541
     }
   },
   "usersRegistry": [
@@ -523,19 +541,22 @@
       "pinCode": "0611"
     },
     {
-      "id": "user_1793986944850",
+      "id": "user_1793990125525",
       "name": "فهیمه",
       "avatarColor": "#0ea5e9",
-      "createdAt": 1793986944850,
-      "pinCode": "7077"
+      "createdAt": 1793990125525,
+      "pinCode": "1320"
     },
     {
-      "id": "user_1793986955696",
-      "name": "فهیمه",
+      "id": "user_1793991698443",
+      "name": "علیرضا",
       "avatarColor": "#8b5cf6",
-      "createdAt": 1793986955696,
-      "pinCode": "1320"
+      "createdAt": 1793991698443,
+      "pinCode": "1383"
     }
+  ],
+  "deletedUserIds": [
+    "user_1793986944850"
   ],
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f"
 }
