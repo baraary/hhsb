@@ -13,6 +13,7 @@ import {
   IRANIAN_BANKS,
   BankLogoVector,
   detectBankByCardNumber,
+  detectBankByText,
 } from '../utils/iranianBanks';
 import {
   CARD_COLOR_PALETTES,
@@ -96,6 +97,21 @@ export const CardsView: React.FC<CardsViewProps> = ({
     );
   };
 
+  const handleTitleChange = (val: string) => {
+    setTitle(val);
+    const cleanDigits = toEnglishDigits(cardNumber).replace(/\D/g, '');
+    const hasRealCardPrefix =
+      cleanDigits.length >= 6 &&
+      !cleanDigits.endsWith('0000000000') &&
+      Boolean(detectBankByCardNumber(cleanDigits));
+    if (!hasRealCardPrefix) {
+      const detectedFromTitle = detectBankByText(val);
+      if (detectedFromTitle) {
+        setBankId(detectedFromTitle);
+      }
+    }
+  };
+
   const handleCardNumberChange = (val: string) => {
     const clean = toEnglishDigits(val).replace(/\D/g, '').slice(0, 16);
     setCardNumber(clean);
@@ -107,20 +123,31 @@ export const CardsView: React.FC<CardsViewProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalTitle = title.trim() || IRANIAN_BANKS[bankId]?.name || 'کارت بانکی';
     const cleanDigits = toEnglishDigits(cardNumber).replace(/\D/g, '');
-    const defaultPrefix = IRANIAN_BANKS[bankId]?.prefixes?.[0] || '610433';
+    const detectedByDigits =
+      cleanDigits.length >= 6 && !cleanDigits.endsWith('0000000000')
+        ? detectBankByCardNumber(cleanDigits)
+        : null;
+    const detectedByTitle = detectBankByText(title);
+    const resolvedBankId: IranianBankId =
+      detectedByDigits ||
+      (bankId === 'mellat' && detectedByTitle ? detectedByTitle : bankId);
+
+    const finalTitle =
+      title.trim() || IRANIAN_BANKS[resolvedBankId]?.name || 'کارت بانکی';
+    const defaultPrefix = IRANIAN_BANKS[resolvedBankId]?.prefixes?.[0] || '610433';
     const finalCardNumber =
-      cleanDigits.length === 16
+      cleanDigits.length === 16 &&
+      (!cleanDigits.endsWith('0000000000') || cleanDigits.startsWith(defaultPrefix))
         ? cleanDigits
-        : cleanDigits.length > 0
+        : cleanDigits.length > 0 && !cleanDigits.endsWith('0000000000')
         ? cleanDigits.padEnd(16, '0')
         : `${defaultPrefix}0000000000`.slice(0, 16);
 
     onSaveCard(
       {
         title: finalTitle,
-        bankId,
+        bankId: resolvedBankId,
         cardNumber: finalCardNumber,
         shebaNumber: shebaNumber.trim() || undefined,
         initialBalance: parseInt(
@@ -251,8 +278,8 @@ export const CardsView: React.FC<CardsViewProps> = ({
                     <input
                       type="text"
                       value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="مثلاً: بلوبانک، ملت، وی‌پاد..."
+                      onChange={(e) => handleTitleChange(e.target.value)}
+                      placeholder="مثلاً: بانک رفاه، بلوبانک، ملت، وی‌پاد..."
                       className="w-full px-4 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
                     />
                   </div>

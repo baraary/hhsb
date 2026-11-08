@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Shuffle, Check, Copy } from 'lucide-react';
 import { BankCard, Transaction } from '../types';
-import { IRANIAN_BANKS, BankLogoVector } from '../utils/iranianBanks';
+import { IRANIAN_BANKS, BankLogoVector, detectBankByText } from '../utils/iranianBanks';
 import {
   resolveCardGradient,
   resolveCardPattern,
@@ -30,7 +30,12 @@ export const BankCardVisual: React.FC<BankCardVisualProps> = ({
   compact = false,
 }) => {
   const [copied, setCopied] = useState<'card' | 'sheba' | null>(null);
-  const bank = IRANIAN_BANKS[card.bankId] || IRANIAN_BANKS.other;
+  const titleBankId = detectBankByText(card.title || '');
+  const effectiveBankId =
+    card.bankId === 'mellat' && titleBankId && titleBankId !== 'mellat'
+      ? titleBankId
+      : card.bankId;
+  const bank = IRANIAN_BANKS[effectiveBankId] || IRANIAN_BANKS.other;
 
   const cardIncome = transactions
     .filter((t) => t.cardId === card.id && t.type === 'income')
@@ -42,7 +47,7 @@ export const BankCardVisual: React.FC<BankCardVisualProps> = ({
 
   const currentBalance = card.initialBalance + cardIncome - cardExpense;
 
-  const gradient = resolveCardGradient(card);
+  const gradient = resolveCardGradient({ ...card, bankId: effectiveBankId });
   const patternId = resolveCardPattern(card);
 
   // If the user explicitly picked a custom color palette for this card, show it even in monochrome theme
@@ -83,7 +88,7 @@ export const BankCardVisual: React.FC<BankCardVisualProps> = ({
       <div className="relative z-10 flex items-center justify-between gap-2.5">
         <div className="flex items-center gap-2.5 min-w-0">
           <BankLogoVector
-            bankId={card.bankId}
+            bankId={effectiveBankId}
             size={compact ? 34 : 38}
             mono={useMonochromeSurface}
           />

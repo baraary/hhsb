@@ -449,6 +449,194 @@ export function detectBankByCardNumber(cardNumber: string): IranianBankId | null
   return null;
 }
 
+const BANK_TEXT_PATTERNS: {
+  bankId: IranianBankId;
+  explicit: string[];
+  short: string[];
+}[] = [
+  {
+    bankId: 'refah',
+    explicit: ['بانک رفاه', 'رفاه کارگران', 'بانکرفاه', 'ب.رفاه', 'refah bank', 'refah'],
+    short: ['رفاه'],
+  },
+  {
+    bankId: 'blu',
+    explicit: ['بلوبانک', 'بلو بانک', 'blubank', 'blu bank'],
+    short: ['بلو'],
+  },
+  {
+    bankId: 'mellat',
+    explicit: ['بانک ملت', 'بانکملت', 'ب.ملت', 'bank mellat', 'mellat'],
+    short: ['ملت'],
+  },
+  {
+    bankId: 'melli',
+    explicit: ['بانک ملی', 'ملی ایران', 'بانکملی', 'سامانه بام', 'bank melli', 'melli'],
+    short: ['ملی'],
+  },
+  {
+    bankId: 'saman',
+    explicit: ['بانک سامان', 'بانکسامان', 'سامانک', 'saman bank', 'saman'],
+    short: ['سامان'],
+  },
+  {
+    bankId: 'pasargad',
+    explicit: ['بانک پاسارگاد', 'پاسارگاد', 'ویپاد', 'وی پاد', 'pasargad', 'wepod'],
+    short: ['پاسارگاد', 'ویپاد'],
+  },
+  {
+    bankId: 'tejarat',
+    explicit: ['بانک تجارت', 'بانکتجارت', 'همراه بانک تجارت', 'tejarat'],
+    short: ['تجارت'],
+  },
+  {
+    bankId: 'saderat',
+    explicit: ['بانک صادرات', 'بانکصادرات', 'سپینو', 'saderat'],
+    short: ['صادرات'],
+  },
+  {
+    bankId: 'maskan',
+    explicit: ['بانک مسکن', 'بانکمسکن', 'maskan'],
+    short: ['مسکن'],
+  },
+  {
+    bankId: 'sepah',
+    explicit: ['بانک سپه', 'بانکسپه', 'امیدبانک', 'امید بانک', 'sepah'],
+    short: ['سپه'],
+  },
+  {
+    bankId: 'keshavarzi',
+    explicit: ['بانک کشاورزی', 'بانککشاورزی', 'keshavarzi'],
+    short: ['کشاورزی'],
+  },
+  {
+    bankId: 'resalat',
+    explicit: ['بانک رسالت', 'قرض الحسنه رسالت', 'رسالت', 'resalat'],
+    short: ['رسالت'],
+  },
+  {
+    bankId: 'mehr_iran',
+    explicit: ['مهر ایران', 'مهرایران', 'قرض الحسنه مهر', 'بانک مهر', 'mehr iran'],
+    short: ['مهر'],
+  },
+  {
+    bankId: 'ayandeh',
+    explicit: ['بانک آینده', 'بانکآینده', 'آبانک', 'ayandeh'],
+    short: ['آینده'],
+  },
+  {
+    bankId: 'parsian',
+    explicit: ['بانک پارسیان', 'پارسیان', 'parsian'],
+    short: ['پارسیان'],
+  },
+  {
+    bankId: 'shahr',
+    explicit: ['بانک شهر', 'همراه شهر', 'shahr bank'],
+    short: ['شهر'],
+  },
+  {
+    bankId: 'gardeshgari',
+    explicit: ['بانک گردشگری', 'گردشگری', 'توبانک', 'tobank'],
+    short: ['گردشگری', 'توبانک'],
+  },
+  {
+    bankId: 'eghtesad_novin',
+    explicit: ['اقتصاد نوین', 'اقتصادنوین', 'بانک اقتصاد'],
+    short: ['اقتصاد نوین'],
+  },
+  {
+    bankId: 'sina',
+    explicit: ['بانک سینا', 'سینا', 'sina bank'],
+    short: ['سینا'],
+  },
+  {
+    bankId: 'karafarin',
+    explicit: ['بانک کارآفرین', 'کارآفرین', 'کارافرین'],
+    short: ['کارآفرین'],
+  },
+  {
+    bankId: 'dey',
+    explicit: ['بانک دی', 'dey bank'],
+    short: ['دی'],
+  },
+  {
+    bankId: 'sarmayeh',
+    explicit: ['بانک سرمایه', 'sarmayeh'],
+    short: ['سرمایه'],
+  },
+  {
+    bankId: 'postbank',
+    explicit: ['پست بانک', 'پست‌بانک', 'postbank'],
+    short: ['پست بانک'],
+  },
+  {
+    bankId: 'bankino',
+    explicit: ['بانکینو', 'bankino'],
+    short: ['بانکینو'],
+  },
+  {
+    bankId: 'izbank',
+    explicit: ['ایران زمین', 'ایران‌زمین', 'بانک ایران زمین'],
+    short: ['ایران زمین'],
+  },
+  {
+    bankId: 'khavarmianeh',
+    explicit: ['بانک خاورمیانه', 'خاورمیانه'],
+    short: ['خاورمیانه'],
+  },
+  {
+    bankId: 'sanat_madan',
+    explicit: ['صنعت و معدن', 'بانک صنعت'],
+    short: ['صنعت و معدن'],
+  },
+  {
+    bankId: 'tosee_taavon',
+    explicit: ['توسعه تعاون', 'بانک توسعه تعاون'],
+    short: ['توسعه تعاون'],
+  },
+];
+
+export function detectBankByText(rawText: string): IranianBankId | null {
+  if (!rawText || !rawText.trim()) return null;
+  const cleaned = rawText
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/\u200C/g, ' ')
+    .replace(/[\u200B\u200D-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '')
+    // Strip PSP/POS gateway names that contain bank words ("به پرداخت ملت", "به‌پرداخت ملت")
+    .replace(/به\s*پرداخت\s*ملت/g, 'درگاه پرداخت')
+    .replace(/به\s*پرداخت/g, 'درگاه پرداخت')
+    .replace(/اپلیکیشن\s*ملت/g, '')
+    .toLowerCase();
+
+  // Pass 1: Check explicit unambiguous bank phrases
+  for (const item of BANK_TEXT_PATTERNS) {
+    for (const kw of item.explicit) {
+      if (cleaned.includes(kw.toLowerCase())) {
+        return item.bankId;
+      }
+    }
+  }
+
+  // Remove street/store/square names before checking short keywords (e.g., "خیابان ملت", "فروشگاه رفاه" vs bank)
+  const withoutLocations = cleaned.replace(
+    /(?:خیابان|میدان|بلوار|ایستگاه|مترو|کوچه|تقاطع|بزرگراه|پاساژ|مجتمع)\s+\S+/g,
+    ' '
+  );
+
+  // Pass 2: Check short bank names
+  for (const item of BANK_TEXT_PATTERNS) {
+    for (const kw of item.short) {
+      const regex = new RegExp(`(?:^|[\\s:،,._\\-()/«»*])(${kw.toLowerCase()})(?:$|[\\s:،,._\\-()/«»*])`);
+      if (regex.test(withoutLocations) || withoutLocations.trim() === kw.toLowerCase()) {
+        return item.bankId;
+      }
+    }
+  }
+
+  return null;
+}
+
 export const BankLogoVector: React.FC<{
   bankId: IranianBankId;
   size?: number;

@@ -13,6 +13,7 @@ import {
   formatDateToJalaliStr,
   formatTimeFromDate,
 } from './persian';
+import { IRANIAN_BANKS, detectBankByText } from './iranianBanks';
 
 export interface ParsedBankSms {
   smsHash: string;
@@ -55,25 +56,19 @@ declare global {
   }
 }
 
-const BANK_KEYWORDS: { bankId: IranianBankId; name: string; keywords: string[] }[] = [
-  { bankId: 'mellat', name: 'بانک ملت', keywords: ['بانک ملت', 'ملت', 'به پرداخت', 'mellat', '98200012'] },
-  { bankId: 'blu', name: 'بلوبانک', keywords: ['بلوبانک', 'بلو ', 'بلو\n', 'blu', 'blubank'] },
-  { bankId: 'saman', name: 'بانک سامان', keywords: ['بانک سامان', 'سامان', 'saman', '9820000842'] },
-  { bankId: 'pasargad', name: 'بانک پاسارگاد', keywords: ['پاسارگاد', 'ویپاد', 'pasargad', 'wepod'] },
-  { bankId: 'melli', name: 'بانک ملی', keywords: ['بانک ملی', 'ملی ایران', 'بام', 'melli'] },
-  { bankId: 'tejarat', name: 'بانک تجارت', keywords: ['بانک تجارت', 'تجارت', 'tejarat'] },
-  { bankId: 'saderat', name: 'بانک صادرات', keywords: ['بانک صادرات', 'صادرات', 'سپینو', 'saderat'] },
-  { bankId: 'maskan', name: 'بانک مسکن', keywords: ['بانک مسکن', 'مسکن', 'maskan'] },
-  { bankId: 'sepah', name: 'بانک سپه', keywords: ['بانک سپه', 'سپه', 'امیدبانک', 'sepah'] },
-  { bankId: 'resalat', name: 'بانک رسالت', keywords: ['رسالت', 'قرض الحسنه رسالت', 'resalat'] },
-  { bankId: 'ayandeh', name: 'بانک آینده', keywords: ['بانک آینده', 'آینده', 'آبان‌تتر', 'ayandeh'] },
-  { bankId: 'parsian', name: 'بانک پارسیان', keywords: ['پارسیان', 'parsian'] },
-  { bankId: 'keshavarzi', name: 'بانک کشاورزی', keywords: ['کشاورزی', 'keshavarzi'] },
-  { bankId: 'refah', name: 'بانک رفاه', keywords: ['بانک رفاه', 'رفاه کارگران', 'refah'] },
-  { bankId: 'mehr_iran', name: 'مهر ایران', keywords: ['مهر ایران', 'قرض الحسنه مهر', 'بانک مهر'] },
-  { bankId: 'shahr', name: 'بانک شهر', keywords: ['بانک شهر', 'همراه شهر'] },
-  { bankId: 'gardeshgari', name: 'بانک گردشگری', keywords: ['گردشگری', 'توبانک'] },
-  { bankId: 'eghtesad_novin', name: 'اقتصاد نوین', keywords: ['اقتصاد نوین', 'اقتصادنوین'] },
+const SENDER_NUMBER_BANKS: { bankId: IranianBankId; senders: string[] }[] = [
+  { bankId: 'refah', senders: ['98200013', '200013', '100013', 'refah'] },
+  { bankId: 'mellat', senders: ['98200012', '200012', '100012', 'mellat'] },
+  { bankId: 'blu', senders: ['blubank', 'blu'] },
+  { bankId: 'saman', senders: ['9820000842', '20000842', 'saman'] },
+  { bankId: 'pasargad', senders: ['982000500', '2000500', 'pasargad', 'wepod'] },
+  { bankId: 'melli', senders: ['98200017', '200017', 'melli'] },
+  { bankId: 'tejarat', senders: ['98200018', '200018', 'tejarat'] },
+  { bankId: 'saderat', senders: ['98200019', '200019', 'saderat'] },
+  { bankId: 'maskan', senders: ['98200014', '200014', 'maskan'] },
+  { bankId: 'sepah', senders: ['98200015', '200015', 'sepah'] },
+  { bankId: 'keshavarzi', senders: ['98200016', '200016', 'keshavarzi'] },
+  { bankId: 'resalat', senders: ['98200070', '200070', 'resalat'] },
 ];
 
 export function computeSmsHash(text: string): string {
@@ -86,11 +81,14 @@ export function computeSmsHash(text: string): string {
 }
 
 /**
- * Strips invisible Unicode directional marks (LRM, RLM, LRE, RLE, PDF, etc.) and normalizes digits/commas
+ * Strips invisible Unicode directional marks (LRM, RLM, LRE, RLE, PDF, etc.),
+ * converts Persian ZWNJ (\u200C) to space so words like "بانک‌رفاه" don't stick together,
+ * and normalizes digits/commas.
  */
 function normalizeSmsText(rawText: string): string {
   return toEnglishDigits(rawText || '')
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '')
+    .replace(/\u200C/g, ' ')
+    .replace(/[\u200B\u200D-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '')
     .replace(/ي/g, 'ی')
     .replace(/ك/g, 'ک')
     .replace(/＋/g, '+')
@@ -280,37 +278,108 @@ export function parseIranianBankSms(
 
   // 3. Detect Bank & Match User's Saved BankCard
   let detectedBankId: IranianBankId | undefined;
-  let detectedBankName: string | undefined;
-  const combinedSource = `${sender || ''} ${normalized}`.toLowerCase();
 
-  for (const b of BANK_KEYWORDS) {
-    if (b.keywords.some((kw) => combinedSource.includes(kw.toLowerCase()))) {
-      detectedBankId = b.bankId;
-      detectedBankName = b.name;
-      break;
+  // 3a. Priority 1: Check first line & last line (where Iranian banks put their official header/signature, e.g. "بانک رفاه")
+  const headerFooterText = [lines[0] || '', lines[lines.length - 1] || ''].join(' ');
+  const fromHeaderFooter = detectBankByText(headerFooterText);
+  if (fromHeaderFooter) {
+    detectedBankId = fromHeaderFooter;
+  }
+
+  // 3b. Priority 2: Check full SMS body text
+  if (!detectedBankId) {
+    const fromFullBody = detectBankByText(normalized);
+    if (fromFullBody) {
+      detectedBankId = fromFullBody;
     }
   }
 
-  let matchedCard = cards.find((c) => c.isDefault) || cards[0];
+  // 3c. Priority 3: Check SMS sender address/number if provided
+  if (!detectedBankId && sender) {
+    const fromSenderText = detectBankByText(sender);
+    if (fromSenderText) {
+      detectedBankId = fromSenderText;
+    } else {
+      const lowerSender = toEnglishDigits(sender).toLowerCase();
+      for (const sItem of SENDER_NUMBER_BANKS) {
+        if (sItem.senders.some((s) => lowerSender.includes(s))) {
+          detectedBankId = sItem.bankId;
+          break;
+        }
+      }
+    }
+  }
 
-  // Try matching last 4 digits of card number in SMS
-  for (const card of cards) {
-    const cleanCard = toEnglishDigits(card.cardNumber).replace(/\D/g, '');
+  // Helper to check if a card has a real, non-placeholder last 4 digits
+  const getValidCardLast4 = (card: BankCard): string | null => {
+    const cleanCard = toEnglishDigits(card.cardNumber || '').replace(/\D/g, '');
+    if (cleanCard.length < 12) return null;
+    // Cards created without entering a full 16-digit card number are padded with "0000000000"
+    if (cleanCard.endsWith('000000')) return null;
     const last4 = cleanCard.slice(-4);
-    if (last4.length === 4 && normalized.includes(last4)) {
-      matchedCard = card;
-      detectedBankId = card.bankId;
-      break;
+    if (last4.length !== 4 || last4 === '0000' || /^(\d)\1{3}$/.test(last4)) {
+      return null;
+    }
+    return last4;
+  };
+
+  // Helper to verify that `last4` in the SMS is an actual card/account suffix and not part of an amount or year
+  const smsHasCardLast4 = (last4: string): boolean => {
+    // Strip comma-formatted amounts and Jalali dates before searching for last4
+    const strippedAmountsAndDates = normalized
+      .replace(/\d{1,3}(?:,\d{3})+/g, ' ')
+      .replace(/\b14\d{2}[/.-]\d{1,2}[/.-]\d{1,2}\b/g, ' ');
+    const cardSuffixRegex = new RegExp(`(?:\\*|\\.|\\b|-)${last4}(?:\\b|\\*|$)`);
+    return cardSuffixRegex.test(strippedAmountsAndDates);
+  };
+
+  // Helper to get the effective bankId of a saved card (respects card title if user named it "بانک رفاه" or "رفاه")
+  const getCardEffectiveBankId = (card: BankCard): IranianBankId => {
+    const fromTitle = detectBankByText(card.title || '');
+    if (fromTitle && card.bankId === 'mellat' && fromTitle !== 'mellat') {
+      return fromTitle;
+    }
+    return card.bankId;
+  };
+
+  let matchedCard: BankCard | undefined;
+
+  if (detectedBankId) {
+    // Bank was explicitly identified from the SMS (e.g. "بانک رفاه").
+    // NEVER allow a card from another bank to overwrite `detectedBankId`!
+    const bankCards = cards.filter(
+      (c) =>
+        c.bankId === detectedBankId ||
+        getCardEffectiveBankId(c) === detectedBankId ||
+        detectBankByText(c.title || '') === detectedBankId
+    );
+
+    // If user has multiple cards for this bank, prefer the one whose real last4 is in the SMS
+    matchedCard =
+      bankCards.find((c) => {
+        const last4 = getValidCardLast4(c);
+        return last4 ? smsHasCardLast4(last4) : false;
+      }) || bankCards[0];
+  } else {
+    // No bank name was mentioned in the SMS text; try matching by a real 4-digit card suffix
+    for (const card of cards) {
+      const last4 = getValidCardLast4(card);
+      if (last4 && smsHasCardLast4(last4)) {
+        matchedCard = card;
+        detectedBankId = getCardEffectiveBankId(card);
+        break;
+      }
     }
   }
 
-  // Otherwise match by bankId
-  if (detectedBankId) {
-    const cardByBank = cards.find((c) => c.bankId === detectedBankId);
-    if (cardByBank) {
-      matchedCard = cardByBank;
-    }
+  // Fallback to default card or first card if no specific card matched
+  if (!matchedCard) {
+    matchedCard = cards.find((c) => c.isDefault) || cards[0];
   }
+
+  const detectedBankName = detectedBankId
+    ? IRANIAN_BANKS[detectedBankId]?.name
+    : undefined;
 
   // 4. Extract Jalali Date & Time from SMS (fallback to Android SMS received timestamp if available)
   const receivedDateObj =
