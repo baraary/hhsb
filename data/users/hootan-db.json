@@ -396,7 +396,7 @@
       "subCategories": [
         {
           "id": "sub_1794112441846",
-          "name": "",
+          "name": "بسته همره اول",
           "icon": "smartphone"
         }
       ]
@@ -553,7 +553,7 @@
     "sms_693fadfd",
     "sms_2488a77"
   ],
-  "updatedAt": 1794112476270,
+  "updatedAt": 1794112483538,
   "settings": {
     "userName": "هوتن",
     "hootanName": "هوتن",
@@ -572,7 +572,7 @@
       "branch": "main",
       "filePath": "data/users/hootan-db.json",
       "token": "",
-      "lastSyncedAt": 1794112477078
+      "lastSyncedAt": 1794112484347
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f",
