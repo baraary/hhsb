@@ -2,6 +2,25 @@
   "userId": "hootan",
   "transactions": [
     {
+      "title": "بسته ایرانسل",
+      "amount": 198000,
+      "type": "expense",
+      "categoryId": "cat_1794112441846",
+      "subCategoryId": "sub_1794112492683",
+      "tags": [
+        "tag_online"
+      ],
+      "spentBy": "hootan",
+      "recordedBy": "hootan",
+      "cardId": "card_1793993421569",
+      "jalaliDate": "1405/08/16",
+      "time": "18:52",
+      "note": "بانك رفاه حساب 386121254 برداشت1,980,000- خريد اينترنتي از به پرداخت ملت ش·پ358206 مانده83,050,943 5/08/16-18:52",
+      "smsHash": "sms_6a22ad4a",
+      "id": "tx_1794112518093_0",
+      "createdAt": 1794112518093
+    },
+    {
       "title": "نون لواش",
       "amount": 56100,
       "type": "expense",
@@ -561,9 +580,10 @@
     "sms_8071378d",
     "sms_4a8b5114",
     "sms_693fadfd",
-    "sms_2488a77"
+    "sms_2488a77",
+    "sms_6a22ad4a"
   ],
-  "updatedAt": 1794112501370,
+  "updatedAt": 1794112518093,
   "settings": {
     "userName": "هوتن",
     "hootanName": "هوتن",
@@ -582,7 +602,7 @@
       "branch": "main",
       "filePath": "data/users/hootan-db.json",
       "token": "",
-      "lastSyncedAt": 1794112502183
+      "lastSyncedAt": 1794112518913
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f",
