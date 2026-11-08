@@ -2,6 +2,25 @@
   "userId": "hootan",
   "transactions": [
     {
+      "title": "اسنپ",
+      "amount": 60000,
+      "type": "expense",
+      "categoryId": "cat_transport",
+      "subCategoryId": "sub_taxi",
+      "tags": [
+        "tag_online"
+      ],
+      "spentBy": "hootan",
+      "recordedBy": "hootan",
+      "cardId": "card_1793993421569",
+      "jalaliDate": "1405/08/16",
+      "time": "15:10",
+      "note": "بانك رفاه حساب 386121254 برداشت600,000- خريد اينترنتي از به پرداخت ملت 2 ش·پ782830 مانده85,913,943 5/08/16-15:10",
+      "smsHash": "sms_8071378d",
+      "id": "tx_1794111769807_0",
+      "createdAt": 1794111769807
+    },
+    {
       "title": "اسنپ صبح سرکار",
       "amount": 158200,
       "type": "expense",
@@ -463,9 +482,10 @@
     "rem_3"
   ],
   "importedSmsHashes": [
-    "sms_b000a75a"
+    "sms_b000a75a",
+    "sms_8071378d"
   ],
-  "updatedAt": 1794022892700,
+  "updatedAt": 1794111769807,
   "settings": {
     "userName": "هوتن",
     "hootanName": "هوتن",
@@ -484,7 +504,7 @@
       "branch": "main",
       "filePath": "data/users/hootan-db.json",
       "token": "",
-      "lastSyncedAt": 1794022893526
+      "lastSyncedAt": 1794111770640
     }
   },
   "syncVault": "59:06:05:47:67:06:67:44:05:17:0e:0f:29:56:08:6b:33:1d:0a:35:53:22:04:29:2b:21:52:3e:5d:5a:21:66:37:03:30:12:17:1d:09:2f",
