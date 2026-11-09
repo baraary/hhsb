@@ -2,6 +2,23 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "برداشت از بلوبانک (سامان)",
+      "amount": 100000,
+      "type": "expense",
+      "categoryId": "cat_transport",
+      "subCategoryId": "sub_taxi",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987187281",
+      "jalaliDate": "1405/08/17",
+      "time": "07:25",
+      "note": "بلو برداشت پول فاطمه عزیز، 1,000,000ریال از حساب شما پرید. موجودی: 24,686,312 ریال ۷:۲۵ ۱۴۰۵.۰۸.۱۷",
+      "smsHash": "sms_f52d41cd",
+      "id": "tx_1794208549865_0",
+      "createdAt": 1794208549865
+    },
+    {
       "title": "برداشت بانکی (پیامک)",
       "amount": 8101620,
       "type": "expense",
@@ -537,9 +554,10 @@
     "sms_9571578b",
     "sms_fcf2f1b0",
     "sms_1c0b3432",
-    "sms_18a07f3c"
+    "sms_18a07f3c",
+    "sms_f52d41cd"
   ],
-  "updatedAt": 1794082068197,
+  "updatedAt": 1794208549865,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -558,7 +576,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794082069000
+      "lastSyncedAt": 1794208550676
     }
   },
   "usersRegistry": [
