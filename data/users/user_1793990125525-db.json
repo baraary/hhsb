@@ -45,7 +45,7 @@
     {
       "title": "بانک تجارت",
       "bankId": "tejarat",
-      "cardNumber": "6273530000000000",
+      "cardNumber": "5859831175927028",
       "initialBalance": 219086,
       "expiryDate": "07/03",
       "cardColorTheme": "auto",
@@ -366,7 +366,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794507657082,
+  "updatedAt": 1794507685223,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -385,7 +385,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794507657887
+      "lastSyncedAt": 1794507686031
     }
   },
   "usersRegistry": [
