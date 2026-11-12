@@ -2,6 +2,23 @@
   "userId": "user_1793991698443",
   "transactions": [
     {
+      "title": "برداشت بانکی (پیامک)",
+      "amount": 224320,
+      "type": "expense",
+      "categoryId": "cat_dining",
+      "subCategoryId": "sub_cafe",
+      "tags": [],
+      "spentBy": "user_1793991698443",
+      "recordedBy": "user_1793991698443",
+      "cardId": "card_1793993202007",
+      "jalaliDate": "1405/08/20",
+      "time": "11:27",
+      "note": "‪681570014036862001‬ 2,243,200- 1405/8/20-11:27 مانده:13,175,193",
+      "smsHash": "sms_ef8b3829",
+      "id": "tx_1794509816302_0",
+      "createdAt": 1794509816302
+    },
+    {
       "title": "برداشت از بلوبانک (سامان)",
       "amount": 100000,
       "type": "expense",
@@ -371,9 +388,10 @@
   "importedSmsHashes": [
     "sms_e168706f",
     "sms_d8ca3e2e",
-    "sms_c3b5c912"
+    "sms_c3b5c912",
+    "sms_ef8b3829"
   ],
-  "updatedAt": 1794509796133,
+  "updatedAt": 1794509816302,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -392,7 +410,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794509796945
+      "lastSyncedAt": 1794509817118
     }
   },
   "usersRegistry": [
