@@ -3,6 +3,23 @@
   "transactions": [
     {
       "title": "برداشت بانکی (پیامک)",
+      "amount": 40000,
+      "type": "expense",
+      "categoryId": "cat_groceries",
+      "subCategoryId": "sub_supermarket",
+      "tags": [],
+      "spentBy": "user_1793991698443",
+      "recordedBy": "user_1793991698443",
+      "cardId": "card_1793993202007",
+      "jalaliDate": "1405/08/19",
+      "time": "10:36",
+      "note": "‪681570014036862001‬ 400,000- 1405/8/19-10:36 مانده:33,018,393",
+      "smsHash": "sms_fe4700f5",
+      "id": "tx_1794509841103_0",
+      "createdAt": 1794509841103
+    },
+    {
+      "title": "برداشت بانکی (پیامک)",
       "amount": 1760000,
       "type": "expense",
       "categoryId": "cat_fun",
@@ -407,9 +424,10 @@
     "sms_d8ca3e2e",
     "sms_c3b5c912",
     "sms_ef8b3829",
-    "sms_445818f2"
+    "sms_445818f2",
+    "sms_fe4700f5"
   ],
-  "updatedAt": 1794509832446,
+  "updatedAt": 1794509841103,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -428,7 +446,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794509833258
+      "lastSyncedAt": 1794509841915
     }
   },
   "usersRegistry": [
