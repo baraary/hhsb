@@ -109,7 +109,7 @@
       "title": "بلو بانک",
       "bankId": "blu",
       "cardNumber": "6219861995578035",
-      "initialBalance": 31904000,
+      "initialBalance": 32175000,
       "expiryDate": "06/05",
       "cardColorTheme": "auto",
       "patternId": "sound_spectrum",
@@ -427,7 +427,7 @@
     "sms_445818f2",
     "sms_fe4700f5"
   ],
-  "updatedAt": 1794510073188,
+  "updatedAt": 1794510136241,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -446,7 +446,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794510073999
+      "lastSyncedAt": 1794510137048
     }
   },
   "usersRegistry": [
