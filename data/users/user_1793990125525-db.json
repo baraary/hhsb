@@ -51,6 +51,16 @@
       "cardColorTheme": "auto",
       "patternId": "silk_waves",
       "id": "card_1794507657082"
+    },
+    {
+      "title": "بانک ملی",
+      "bankId": "melli",
+      "cardNumber": "6037997240471434",
+      "initialBalance": 87231,
+      "expiryDate": "05/10",
+      "cardColorTheme": "auto",
+      "patternId": "silk_waves",
+      "id": "card_1794507781861"
     }
   ],
   "categories": [
@@ -366,7 +376,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794507685223,
+  "updatedAt": 1794507781861,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -385,7 +395,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794507686031
+      "lastSyncedAt": 1794507782670
     }
   },
   "usersRegistry": [
