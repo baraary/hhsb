@@ -387,6 +387,18 @@
   ],
   "reminders": [
     {
+      "title": "قسط وام بلو",
+      "amount": 1765227,
+      "dueDate": "1405/09/09",
+      "category": "installment",
+      "person": "user_1793990125525",
+      "isPaid": false,
+      "recurrence": "monthly",
+      "totalInstallments": 2,
+      "paidInstallments": 0,
+      "id": "rem_1794508545615"
+    },
+    {
       "title": "قسط وام هوتن",
       "amount": 9720000,
       "dueDate": "1405/08/24",
@@ -406,7 +418,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794508444249,
+  "updatedAt": 1794508545615,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -425,7 +437,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794508445057
+      "lastSyncedAt": 1794508546421
     }
   },
   "usersRegistry": [
