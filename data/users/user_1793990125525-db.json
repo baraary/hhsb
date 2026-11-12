@@ -61,6 +61,16 @@
       "cardColorTheme": "auto",
       "patternId": "silk_waves",
       "id": "card_1794507781861"
+    },
+    {
+      "title": "رسالت",
+      "bankId": "resalat",
+      "cardNumber": "5041721239027437",
+      "initialBalance": 1167800,
+      "expiryDate": "09/03",
+      "cardColorTheme": "auto",
+      "patternId": "silk_waves",
+      "id": "card_1794507860944"
     }
   ],
   "categories": [
@@ -376,7 +386,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794507781861,
+  "updatedAt": 1794507860944,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -395,7 +405,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794507782670
+      "lastSyncedAt": 1794507861756
     }
   },
   "usersRegistry": [
