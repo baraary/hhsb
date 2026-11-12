@@ -31,6 +31,16 @@
       "cardColorTheme": "auto",
       "patternId": "silk_waves",
       "id": "card_1794507242644"
+    },
+    {
+      "title": "مهر",
+      "bankId": "mehr_iran",
+      "cardNumber": "6063731290453720",
+      "initialBalance": 114791,
+      "expiryDate": "10/02",
+      "cardColorTheme": "auto",
+      "patternId": "silk_waves",
+      "id": "card_1794507419995"
     }
   ],
   "categories": [
@@ -346,7 +356,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794507257094,
+  "updatedAt": 1794507419995,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -365,7 +375,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794507257901
+      "lastSyncedAt": 1794507420801
     }
   },
   "usersRegistry": [
