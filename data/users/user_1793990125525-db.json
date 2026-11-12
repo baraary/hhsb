@@ -71,6 +71,16 @@
       "cardColorTheme": "auto",
       "patternId": "silk_waves",
       "id": "card_1794507860944"
+    },
+    {
+      "title": "رفاه",
+      "bankId": "refah",
+      "cardNumber": "5894631252727490",
+      "initialBalance": 275551,
+      "expiryDate": "10/04",
+      "cardColorTheme": "auto",
+      "patternId": "silk_waves",
+      "id": "card_1794507970128"
     }
   ],
   "categories": [
@@ -386,7 +396,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794507900466,
+  "updatedAt": 1794507970128,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -405,7 +415,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794507901273
+      "lastSyncedAt": 1794507970942
     }
   },
   "usersRegistry": [
