@@ -319,6 +319,11 @@
           "id": "sub_1794510602854",
           "name": "کالای دیجیتال",
           "icon": "shopping-cart"
+        },
+        {
+          "id": "sub_1794510627461",
+          "name": "ساعت",
+          "icon": "shopping-cart"
         }
       ]
     }
@@ -416,7 +421,7 @@
     "sms_445818f2",
     "sms_fe4700f5"
   ],
-  "updatedAt": 1794510622612,
+  "updatedAt": 1794510627461,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -435,7 +440,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794510623420
+      "lastSyncedAt": 1794510628272
     }
   },
   "usersRegistry": [
