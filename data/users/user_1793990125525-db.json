@@ -41,6 +41,16 @@
       "cardColorTheme": "auto",
       "patternId": "silk_waves",
       "id": "card_1794507419995"
+    },
+    {
+      "title": "بانک تجارت",
+      "bankId": "tejarat",
+      "cardNumber": "6273530000000000",
+      "initialBalance": 219086,
+      "expiryDate": "07/03",
+      "cardColorTheme": "auto",
+      "patternId": "silk_waves",
+      "id": "card_1794507657082"
     }
   ],
   "categories": [
@@ -356,7 +366,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794507419995,
+  "updatedAt": 1794507657082,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -375,7 +385,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794507420801
+      "lastSyncedAt": 1794507657887
     }
   },
   "usersRegistry": [
