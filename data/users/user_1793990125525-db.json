@@ -401,14 +401,17 @@
     {
       "title": "قسط کارگاه ترکمان",
       "amount": 5000000,
-      "dueDate": "1405/09/01",
+      "dueDate": "1405/10/01",
       "category": "installment",
       "person": "user_1793990125525",
       "isPaid": false,
       "recurrence": "monthly",
       "totalInstallments": 2,
-      "paidInstallments": 0,
-      "id": "rem_1794508591554"
+      "paidInstallments": 1,
+      "id": "rem_1794508591554",
+      "paidDates": [
+        "1405/08/21"
+      ]
     },
     {
       "title": "قسط وام بلو",
@@ -442,7 +445,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794508674892,
+  "updatedAt": 1794508679984,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -461,7 +464,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794508675701
+      "lastSyncedAt": 1794508680794
     }
   },
   "usersRegistry": [
