@@ -2,6 +2,22 @@
   "userId": "user_1793991698443",
   "transactions": [
     {
+      "title": "قسط اول پاور بانک",
+      "amount": 970000,
+      "type": "expense",
+      "categoryId": "cat_1794510602854",
+      "subCategoryId": "sub_1794510602854",
+      "tags": [],
+      "spentBy": "user_1793991698443",
+      "recordedBy": "user_1793991698443",
+      "cardId": "card_1794510424162",
+      "jalaliDate": "1405/08/20",
+      "time": "22:41",
+      "note": "",
+      "id": "tx_1794510713397",
+      "createdAt": 1794510713397
+    },
+    {
       "title": "بلیط کنسرت",
       "amount": 1760000,
       "type": "expense",
@@ -431,7 +447,7 @@
     "sms_445818f2",
     "sms_fe4700f5"
   ],
-  "updatedAt": 1794510667674,
+  "updatedAt": 1794510713397,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -450,7 +466,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794510668483
+      "lastSyncedAt": 1794510714213
     }
   },
   "usersRegistry": [
