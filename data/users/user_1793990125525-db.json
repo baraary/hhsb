@@ -81,6 +81,16 @@
       "cardColorTheme": "auto",
       "patternId": "silk_waves",
       "id": "card_1794507970128"
+    },
+    {
+      "title": "پول نقد",
+      "bankId": "other",
+      "cardNumber": "6104330000000000",
+      "initialBalance": 1273000,
+      "expiryDate": "00/00",
+      "cardColorTheme": "auto",
+      "patternId": "starfield_mesh",
+      "id": "card_1794508162773"
     }
   ],
   "categories": [
@@ -396,7 +406,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794507970128,
+  "updatedAt": 1794508162773,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -415,7 +425,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794507970942
+      "lastSyncedAt": 1794508163579
     }
   },
   "usersRegistry": [
