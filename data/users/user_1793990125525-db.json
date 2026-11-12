@@ -406,7 +406,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794508162773,
+  "updatedAt": 1794508192515,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -425,7 +425,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794508163579
+      "lastSyncedAt": 1794508193323
     }
   },
   "usersRegistry": [
