@@ -329,6 +329,11 @@
           "id": "sub_1794510663669",
           "name": "پوشاک",
           "icon": "shopping-cart"
+        },
+        {
+          "id": "sub_1794510667674",
+          "name": "کفش",
+          "icon": "shopping-cart"
         }
       ]
     }
@@ -426,7 +431,7 @@
     "sms_445818f2",
     "sms_fe4700f5"
   ],
-  "updatedAt": 1794510663670,
+  "updatedAt": 1794510667674,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -445,7 +450,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794510664478
+      "lastSyncedAt": 1794510668483
     }
   },
   "usersRegistry": [
