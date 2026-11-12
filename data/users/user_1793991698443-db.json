@@ -219,6 +219,11 @@
           "id": "sub_cinema",
           "name": "سینما، کنسرت و اشتراک",
           "icon": "tv"
+        },
+        {
+          "id": "sub_1794509761675",
+          "name": "سانس فوتبال",
+          "icon": "plane"
         }
       ]
     },
@@ -350,7 +355,7 @@
     "sms_e168706f",
     "sms_d8ca3e2e"
   ],
-  "updatedAt": 1794509643638,
+  "updatedAt": 1794509761676,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -369,7 +374,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794509644466
+      "lastSyncedAt": 1794509762492
     }
   },
   "usersRegistry": [
