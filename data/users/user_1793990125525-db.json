@@ -1,7 +1,18 @@
 {
   "userId": "user_1793990125525",
   "transactions": [],
-  "cards": [],
+  "cards": [
+    {
+      "title": "پاسارگاد",
+      "bankId": "pasargad",
+      "cardNumber": "5022291300848981",
+      "initialBalance": 1443681,
+      "expiryDate": "09/12",
+      "cardColorTheme": "auto",
+      "patternId": "silk_waves",
+      "id": "card_1794506980630"
+    }
+  ],
   "categories": [
     {
       "id": "cat_groceries",
@@ -315,7 +326,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1793993666793,
+  "updatedAt": 1794506980630,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -334,7 +345,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1793993667604
+      "lastSyncedAt": 1794506981442
     }
   },
   "usersRegistry": [
