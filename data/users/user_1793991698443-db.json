@@ -19,23 +19,6 @@
       "createdAt": 1794509841103
     },
     {
-      "title": "برداشت بانکی (پیامک)",
-      "amount": 1760000,
-      "type": "expense",
-      "categoryId": "cat_fun",
-      "subCategoryId": "sub_cinema",
-      "tags": [],
-      "spentBy": "user_1793991698443",
-      "recordedBy": "user_1793991698443",
-      "cardId": "card_1793993202007",
-      "jalaliDate": "1405/08/19",
-      "time": "18:31",
-      "note": "‪681570014036862001‬ 17,600,000- 1405/8/19-18:31 مانده:15,418,393",
-      "smsHash": "sms_445818f2",
-      "id": "tx_1794509832446_0",
-      "createdAt": 1794509832446
-    },
-    {
       "title": "برداشت از بلوبانک (سامان)",
       "amount": 100000,
       "type": "expense",
@@ -410,7 +393,7 @@
     "sms_445818f2",
     "sms_fe4700f5"
   ],
-  "updatedAt": 1794510212642,
+  "updatedAt": 1794510221345,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -429,7 +412,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794510213451
+      "lastSyncedAt": 1794510222155
     }
   },
   "usersRegistry": [
