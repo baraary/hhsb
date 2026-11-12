@@ -2,6 +2,22 @@
   "userId": "user_1793991698443",
   "transactions": [
     {
+      "title": "قهوه",
+      "amount": 224000,
+      "type": "expense",
+      "categoryId": "cat_groceries",
+      "subCategoryId": "sub_supermarket",
+      "tags": [],
+      "spentBy": "user_1793991698443",
+      "recordedBy": "user_1793991698443",
+      "cardId": "card_1794510424162",
+      "jalaliDate": "1405/08/20",
+      "time": "22:43",
+      "note": "",
+      "id": "tx_1794510807620",
+      "createdAt": 1794510807621
+    },
+    {
       "title": "قسط اول پاور بانک",
       "amount": 970000,
       "type": "expense",
@@ -447,7 +463,7 @@
     "sms_445818f2",
     "sms_fe4700f5"
   ],
-  "updatedAt": 1794510774468,
+  "updatedAt": 1794510807621,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -466,7 +482,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794510775276
+      "lastSyncedAt": 1794510808432
     }
   },
   "usersRegistry": [
