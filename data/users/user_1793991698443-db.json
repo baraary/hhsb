@@ -3,6 +3,23 @@
   "transactions": [
     {
       "title": "برداشت از بلوبانک (سامان)",
+      "amount": 100000,
+      "type": "expense",
+      "categoryId": "cat_fun",
+      "subCategoryId": "sub_1794509761675",
+      "tags": [],
+      "spentBy": "user_1793991698443",
+      "recordedBy": "user_1793991698443",
+      "cardId": "card_1793993202007",
+      "jalaliDate": "1405/08/20",
+      "time": "11:31",
+      "note": "بلو واریز پول علیرضا عزیز،1,000,000 ریال به حساب شما نشست. موجودی: 322,751,135 ریال ۱۱:۳۱ ۱۴۰۵.۰۸.۲۰",
+      "smsHash": "sms_c3b5c912",
+      "id": "tx_1794509796133_0",
+      "createdAt": 1794509796133
+    },
+    {
+      "title": "برداشت از بلوبانک (سامان)",
       "amount": 270000,
       "type": "expense",
       "categoryId": "cat_dining",
@@ -353,9 +370,10 @@
   ],
   "importedSmsHashes": [
     "sms_e168706f",
-    "sms_d8ca3e2e"
+    "sms_d8ca3e2e",
+    "sms_c3b5c912"
   ],
-  "updatedAt": 1794509761676,
+  "updatedAt": 1794509796133,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -374,7 +392,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794509762492
+      "lastSyncedAt": 1794509796945
     }
   },
   "usersRegistry": [
