@@ -100,7 +100,7 @@
       "title": "مهر",
       "bankId": "mehr_iran",
       "cardNumber": "6063731155058275",
-      "initialBalance": 3341000,
+      "initialBalance": 4311000,
       "expiryDate": "06/12",
       "cardColorTheme": "auto",
       "patternId": "bauhaus_arcs",
@@ -447,7 +447,7 @@
     "sms_445818f2",
     "sms_fe4700f5"
   ],
-  "updatedAt": 1794510713397,
+  "updatedAt": 1794510774468,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -466,7 +466,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794510714213
+      "lastSyncedAt": 1794510775276
     }
   },
   "usersRegistry": [
