@@ -387,6 +387,18 @@
   ],
   "reminders": [
     {
+      "title": "قسط پاور بانک",
+      "amount": 950000,
+      "dueDate": "1405/09/05",
+      "category": "installment",
+      "person": "user_1793990125525",
+      "isPaid": false,
+      "recurrence": "monthly",
+      "totalInstallments": 3,
+      "paidInstallments": 0,
+      "id": "rem_1794508674892"
+    },
+    {
       "title": "قسط کارگاه ترکمان",
       "amount": 5000000,
       "dueDate": "1405/09/01",
@@ -430,7 +442,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794508591554,
+  "updatedAt": 1794508674892,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -449,7 +461,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794508592361
+      "lastSyncedAt": 1794508675701
     }
   },
   "usersRegistry": [
