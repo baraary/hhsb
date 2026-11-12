@@ -16,7 +16,7 @@
       "title": "بلو بانک",
       "bankId": "saman",
       "cardNumber": "6219861874453276",
-      "initialBalance": 18919709,
+      "initialBalance": 1891970,
       "expiryDate": "09/05",
       "cardColorTheme": "auto",
       "patternId": "silk_waves",
@@ -346,7 +346,7 @@
     "rem_3"
   ],
   "importedSmsHashes": [],
-  "updatedAt": 1794507242644,
+  "updatedAt": 1794507257094,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -365,7 +365,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794507243454
+      "lastSyncedAt": 1794507257901
     }
   },
   "usersRegistry": [
