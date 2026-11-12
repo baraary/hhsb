@@ -317,7 +317,7 @@
       "subCategories": [
         {
           "id": "sub_1794510602854",
-          "name": "عمومی",
+          "name": "کا",
           "icon": "shopping-cart"
         }
       ]
@@ -416,7 +416,7 @@
     "sms_445818f2",
     "sms_fe4700f5"
   ],
-  "updatedAt": 1794510602854,
+  "updatedAt": 1794510619358,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -435,7 +435,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794510603664
+      "lastSyncedAt": 1794510620164
     }
   },
   "usersRegistry": [
