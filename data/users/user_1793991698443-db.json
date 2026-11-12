@@ -307,6 +307,20 @@
           "icon": "trending-up"
         }
       ]
+    },
+    {
+      "id": "cat_1794510602854",
+      "name": "خرید کالا",
+      "type": "expense",
+      "icon": "shopping-cart",
+      "color": "#10b981",
+      "subCategories": [
+        {
+          "id": "sub_1794510602854",
+          "name": "عمومی",
+          "icon": "shopping-cart"
+        }
+      ]
     }
   ],
   "tags": [
@@ -402,7 +416,7 @@
     "sms_445818f2",
     "sms_fe4700f5"
   ],
-  "updatedAt": 1794510501054,
+  "updatedAt": 1794510602854,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -421,7 +435,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794510501872
+      "lastSyncedAt": 1794510603664
     }
   },
   "usersRegistry": [
