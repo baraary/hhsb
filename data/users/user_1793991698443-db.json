@@ -2,6 +2,23 @@
   "userId": "user_1793991698443",
   "transactions": [
     {
+      "title": "برداشت از بلوبانک (سامان)",
+      "amount": 270000,
+      "type": "expense",
+      "categoryId": "cat_dining",
+      "subCategoryId": "sub_restaurant",
+      "tags": [],
+      "spentBy": "user_1793991698443",
+      "recordedBy": "user_1793991698443",
+      "cardId": "card_1793993202007",
+      "jalaliDate": "1405/08/21",
+      "time": "21:27",
+      "note": "بلو برداشت پول علیرضا عزیز، 2,700,000 ریال از حساب شما پرید. موجودی: 319,040,135 ریال ۲۱:۲۷ ۱۴۰۵.۰۸.۲۱",
+      "smsHash": "sms_d8ca3e2e",
+      "id": "tx_1794509643638_0",
+      "createdAt": 1794509643638
+    },
+    {
       "title": "واریز به بلوبانک",
       "amount": 5500000,
       "type": "income",
@@ -330,9 +347,10 @@
     "rem_3"
   ],
   "importedSmsHashes": [
-    "sms_e168706f"
+    "sms_e168706f",
+    "sms_d8ca3e2e"
   ],
-  "updatedAt": 1793993202007,
+  "updatedAt": 1794509643638,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -351,7 +369,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1793993202823
+      "lastSyncedAt": 1794509644466
     }
   },
   "usersRegistry": [
