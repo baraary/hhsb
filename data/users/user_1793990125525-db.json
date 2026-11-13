@@ -1,6 +1,26 @@
 {
   "userId": "user_1793990125525",
-  "transactions": [],
+  "transactions": [
+    {
+      "title": "برداشت از بانک رفاه",
+      "amount": 260070,
+      "type": "expense",
+      "categoryId": "cat_groceries",
+      "subCategoryId": "sub_meat",
+      "tags": [
+        "tag_debt"
+      ],
+      "spentBy": "user_1793990125525",
+      "recordedBy": "user_1793990125525",
+      "cardId": "card_1794507970128",
+      "jalaliDate": "1405/08/22",
+      "time": "10:22",
+      "note": "بانک رفاه حساب440723413 کارت2,600,700- مانده154,816 08/22-10:22",
+      "smsHash": "sms_641468e1",
+      "id": "tx_1794552849656_0",
+      "createdAt": 1794552849656
+    }
+  ],
   "cards": [
     {
       "title": "پاسارگاد",
@@ -444,8 +464,10 @@
     "rem_2",
     "rem_3"
   ],
-  "importedSmsHashes": [],
-  "updatedAt": 1794508679984,
+  "importedSmsHashes": [
+    "sms_641468e1"
+  ],
+  "updatedAt": 1794552849657,
   "settings": {
     "userName": "فهیمه",
     "hootanName": "فهیمه",
@@ -464,7 +486,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793990125525-db.json",
       "token": "",
-      "lastSyncedAt": 1794508680794
+      "lastSyncedAt": 1794552850472
     }
   },
   "usersRegistry": [
