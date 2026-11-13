@@ -2,6 +2,23 @@
   "userId": "user_1793991698443",
   "transactions": [
     {
+      "title": "برداشت بانکی (پیامک)",
+      "amount": 200000,
+      "type": "expense",
+      "categoryId": "cat_dining",
+      "subCategoryId": "sub_restaurant",
+      "tags": [],
+      "spentBy": "user_1793991698443",
+      "recordedBy": "user_1793991698443",
+      "cardId": "card_1794510424162",
+      "jalaliDate": "1405/08/22",
+      "time": "11:23",
+      "note": "انتقال به ‪589463*8499‬ 2,000,000 ريال رمز 516103 @ib.qmehr724.com #516103 اعتبار 11:23:36",
+      "smsHash": "sms_62edcefc",
+      "id": "tx_1794556524432_0",
+      "createdAt": 1794556524432
+    },
+    {
       "title": "آدامس",
       "amount": 40000,
       "type": "expense",
@@ -477,9 +494,10 @@
     "sms_c3b5c912",
     "sms_ef8b3829",
     "sms_445818f2",
-    "sms_fe4700f5"
+    "sms_fe4700f5",
+    "sms_62edcefc"
   ],
-  "updatedAt": 1794510843251,
+  "updatedAt": 1794556524432,
   "settings": {
     "userName": "علیرضا",
     "hootanName": "علیرضا",
@@ -498,7 +516,7 @@
       "branch": "main",
       "filePath": "data/users/user_1793991698443-db.json",
       "token": "",
-      "lastSyncedAt": 1794510844063
+      "lastSyncedAt": 1794556525247
     }
   },
   "usersRegistry": [
