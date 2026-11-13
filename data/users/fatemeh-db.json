@@ -2,6 +2,22 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "هوتن",
+      "amount": 5000000,
+      "type": "expense",
+      "categoryId": "cat_1794586192182",
+      "subCategoryId": "sub_1794586192182",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987459688",
+      "jalaliDate": "1405/08/20",
+      "time": "19:40",
+      "note": "",
+      "id": "tx_1794586280990",
+      "createdAt": 1794586280990
+    },
+    {
       "title": "تراپی",
       "amount": 450000,
       "type": "expense",
@@ -633,7 +649,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794586233263,
+  "updatedAt": 1794586280990,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -652,7 +668,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794586234070
+      "lastSyncedAt": 1794586281799
     }
   },
   "usersRegistry": [
