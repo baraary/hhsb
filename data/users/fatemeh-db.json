@@ -2,6 +2,22 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "تراپی",
+      "amount": 450000,
+      "type": "expense",
+      "categoryId": "cat_health",
+      "subCategoryId": "sub_doctor",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987187281",
+      "jalaliDate": "1405/08/20",
+      "time": "19:38",
+      "note": "",
+      "id": "tx_1794586101603",
+      "createdAt": 1794586101603
+    },
+    {
       "title": "شیرینی",
       "amount": 373500,
       "type": "expense",
@@ -589,7 +605,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794586075509,
+  "updatedAt": 1794586101603,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -608,7 +624,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794586076317
+      "lastSyncedAt": 1794586102408
     }
   },
   "usersRegistry": [
