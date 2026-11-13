@@ -2,6 +2,22 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "خوراکی کیله",
+      "amount": 424900,
+      "type": "expense",
+      "categoryId": "cat_groceries",
+      "subCategoryId": "sub_supermarket",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987262928",
+      "jalaliDate": "1405/08/21",
+      "time": "19:43",
+      "note": "",
+      "id": "tx_1794586449337",
+      "createdAt": 1794586449337
+    },
+    {
       "title": "سیخ برگر",
       "amount": 820000,
       "type": "expense",
@@ -713,7 +729,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794586424307,
+  "updatedAt": 1794586449337,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -732,7 +748,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794586425111
+      "lastSyncedAt": 1794586450144
     }
   },
   "usersRegistry": [
