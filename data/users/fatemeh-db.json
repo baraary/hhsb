@@ -2,6 +2,22 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "خرید سورپرایزی",
+      "amount": 1253430,
+      "type": "expense",
+      "categoryId": "cat_fun",
+      "subCategoryId": "sub_gift",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987459688",
+      "jalaliDate": "1405/08/22",
+      "time": "19:42",
+      "note": "",
+      "id": "tx_1794586384837",
+      "createdAt": 1794586384837
+    },
+    {
       "title": "ناخن",
       "amount": 400000,
       "type": "expense",
@@ -681,7 +697,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794586348207,
+  "updatedAt": 1794586384837,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -700,7 +716,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794586349012
+      "lastSyncedAt": 1794586385643
     }
   },
   "usersRegistry": [
