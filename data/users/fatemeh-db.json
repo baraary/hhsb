@@ -2,6 +2,22 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "سهم غذای بچه‌ها",
+      "amount": 410000,
+      "type": "income",
+      "categoryId": "cat_1794586233263",
+      "subCategoryId": "sub_1794586233263",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987187281",
+      "jalaliDate": "1405/08/21",
+      "time": "19:52",
+      "note": "",
+      "id": "tx_1794586948627",
+      "createdAt": 1794586948627
+    },
+    {
       "title": "خوراکی کیله",
       "amount": 424900,
       "type": "expense",
@@ -729,7 +745,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794586901621,
+  "updatedAt": 1794586948627,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -748,7 +764,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794586902428
+      "lastSyncedAt": 1794586949432
     }
   },
   "usersRegistry": [
