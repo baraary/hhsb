@@ -605,7 +605,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794586138235,
+  "updatedAt": 1794586139337,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -614,7 +614,7 @@
     "currencyUnit": "تومان",
     "darkMode": false,
     "themeMode": "light",
-    "colorTheme": "emerald",
+    "colorTheme": "amber",
     "pinCode": "0611",
     "monthlyTotalBudget": 25000000,
     "githubSync": {
@@ -624,7 +624,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794586139934
+      "lastSyncedAt": 1794586141691
     }
   },
   "usersRegistry": [
