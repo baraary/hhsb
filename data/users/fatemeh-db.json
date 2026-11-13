@@ -2,6 +2,22 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "کنسرت رستاک",
+      "amount": 3520000,
+      "type": "expense",
+      "categoryId": "cat_groceries",
+      "subCategoryId": "sub_supermarket",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987459688",
+      "jalaliDate": "1405/08/19",
+      "time": "19:36",
+      "note": "",
+      "id": "tx_1794586014230",
+      "createdAt": 1794586014230
+    },
+    {
       "title": "برداشت از بلوبانک (سامان)",
       "amount": 100000,
       "type": "expense",
@@ -557,7 +573,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794208549865,
+  "updatedAt": 1794586014230,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -576,7 +592,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794208550676
+      "lastSyncedAt": 1794586015036
     }
   },
   "usersRegistry": [
