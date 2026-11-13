@@ -5,8 +5,8 @@
       "title": "کنسرت رستاک",
       "amount": 3520000,
       "type": "expense",
-      "categoryId": "cat_groceries",
-      "subCategoryId": "sub_supermarket",
+      "categoryId": "cat_fun",
+      "subCategoryId": "sub_cinema",
       "tags": [],
       "spentBy": "fatemeh",
       "recordedBy": "fatemeh",
@@ -573,7 +573,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794586014230,
+  "updatedAt": 1794586032352,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -592,7 +592,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794586015036
+      "lastSyncedAt": 1794586033156
     }
   },
   "usersRegistry": [
