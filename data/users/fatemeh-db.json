@@ -476,6 +476,20 @@
           "icon": "shopping-cart"
         }
       ]
+    },
+    {
+      "id": "cat_1794586233263",
+      "name": "قرض و بدهی",
+      "type": "income",
+      "icon": "shopping-cart",
+      "color": "#0ea5e9",
+      "subCategories": [
+        {
+          "id": "sub_1794586233263",
+          "name": "عمومی",
+          "icon": "shopping-cart"
+        }
+      ]
     }
   ],
   "tags": [
@@ -619,7 +633,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794586192183,
+  "updatedAt": 1794586233263,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -638,7 +652,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794586192988
+      "lastSyncedAt": 1794586234070
     }
   },
   "usersRegistry": [
