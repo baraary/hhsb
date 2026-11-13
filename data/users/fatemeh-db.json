@@ -296,7 +296,7 @@
       "bankId": "mehr_iran",
       "cardNumber": "6063731263252935",
       "shebaNumber": "IR240600000000300344319345",
-      "initialBalance": 597850,
+      "initialBalance": 0,
       "expiryDate": "09/06",
       "cardColorTheme": "pastel_mint",
       "patternId": "japanese_seigaiha",
@@ -729,7 +729,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794586449337,
+  "updatedAt": 1794586901621,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -748,7 +748,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794586450144
+      "lastSyncedAt": 1794586902428
     }
   },
   "usersRegistry": [
