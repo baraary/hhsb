@@ -2,6 +2,22 @@
   "userId": "fatemeh",
   "transactions": [
     {
+      "title": "ناخن",
+      "amount": 400000,
+      "type": "expense",
+      "categoryId": "cat_fashion",
+      "subCategoryId": "sub_salon",
+      "tags": [],
+      "spentBy": "fatemeh",
+      "recordedBy": "fatemeh",
+      "cardId": "card_1793987187281",
+      "jalaliDate": "1405/08/21",
+      "time": "19:42",
+      "note": "",
+      "id": "tx_1794586348207",
+      "createdAt": 1794586348207
+    },
+    {
       "title": "علیرضا",
       "amount": 100000,
       "type": "expense",
@@ -665,7 +681,7 @@
     "sms_18a07f3c",
     "sms_f52d41cd"
   ],
-  "updatedAt": 1794586316901,
+  "updatedAt": 1794586348207,
   "settings": {
     "userName": "فاطمه",
     "hootanName": "فاطمه",
@@ -684,7 +700,7 @@
       "branch": "main",
       "filePath": "data/users/fatemeh-db.json",
       "token": "",
-      "lastSyncedAt": 1794586317707
+      "lastSyncedAt": 1794586349012
     }
   },
   "usersRegistry": [
