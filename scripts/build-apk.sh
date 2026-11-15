@@ -40,8 +40,8 @@ cat > "$WORK_DIR/AndroidManifest.xml" << 'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="ir.hamhesab.app"
-    android:versionCode="3"
-    android:versionName="3.0">
+    android:versionCode="4"
+    android:versionName="4.0">
 
     <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="34" />
 
@@ -49,6 +49,9 @@ cat > "$WORK_DIR/AndroidManifest.xml" << 'EOF'
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:label="@string/app_name"
@@ -79,14 +82,17 @@ package ir.hamhesab.app;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
+import android.hardware.biometrics.BiometricPrompt;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.telephony.SmsMessage;
 import android.view.Window;
 import android.view.WindowManager;
@@ -97,6 +103,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import java.util.concurrent.Executor;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -106,6 +113,21 @@ public class MainActivity extends Activity {
     private static final String LIVE_URL = "https://baraary.github.io/hhsb/";
     private static final String LOCAL_FALLBACK = "file:///android_asset/www/index.html";
     private static final int SMS_PERMISSION_REQ_CODE = 101;
+
+    private void sendBiometricResultToJs(final boolean success, final String errorMsg) {
+        if (webView != null) {
+            webView.post(new Runnable() {
+                @Override
+                public void run() {
+                    String safeErr = errorMsg != null ? JSONObject.quote(errorMsg) : "\"\"";
+                    webView.evaluateJavascript(
+                        "if(window.onNativeBiometricResult){window.onNativeBiometricResult(" + (success ? "true" : "false") + "," + safeErr + ");}",
+                        null
+                    );
+                }
+            });
+        }
+    }
 
     public class SmsJsBridge {
         @JavascriptInterface
@@ -124,6 +146,64 @@ public class MainActivity extends Activity {
                     SMS_PERMISSION_REQ_CODE
                 );
             }
+        }
+
+        @JavascriptInterface
+        public boolean isBiometricSupported() {
+            return Build.VERSION.SDK_INT >= 28;
+        }
+
+        @JavascriptInterface
+        public void authenticateBiometric(final String reason) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        try {
+                            Executor mainExecutor = new Executor() {
+                                @Override
+                                public void execute(Runnable command) {
+                                    runOnUiThread(command);
+                                }
+                            };
+                            BiometricPrompt prompt = new BiometricPrompt.Builder(MainActivity.this)
+                                .setTitle("تأیید هویت بیومتریک هم‌حساب")
+                                .setSubtitle(reason != null && !reason.isEmpty() ? reason : "سنسور اثر انگشت گوشی را لمس کنید")
+                                .setNegativeButton("انصراف", mainExecutor, new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        sendBiometricResultToJs(false, "عملیات اثر انگشت توسط کاربر لغو شد.");
+                                    }
+                                })
+                                .build();
+
+                            CancellationSignal cancelSignal = new CancellationSignal();
+                            prompt.authenticate(cancelSignal, mainExecutor, new BiometricPrompt.AuthenticationCallback() {
+                                @Override
+                                public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                                    super.onAuthenticationSucceeded(result);
+                                    sendBiometricResultToJs(true, "");
+                                }
+
+                                @Override
+                                public void onAuthenticationError(int errorCode, CharSequence errString) {
+                                    super.onAuthenticationError(errorCode, errString);
+                                    sendBiometricResultToJs(false, errString != null ? errString.toString() : "تأیید اثر انگشت لغو شد.");
+                                }
+
+                                @Override
+                                public void onAuthenticationFailed() {
+                                    super.onAuthenticationFailed();
+                                }
+                            });
+                        } catch (Exception e) {
+                            sendBiometricResultToJs(false, e.getMessage() != null ? e.getMessage() : "خطا در اجرای سنسور اثر انگشت");
+                        }
+                    } else {
+                        sendBiometricResultToJs(false, "نسخه اندروید از BiometricPrompt پشتیبانی نمی‌کند.");
+                    }
+                }
+            });
         }
 
         @JavascriptInterface

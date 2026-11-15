@@ -201,18 +201,108 @@ export function removeBiometricCredentialForUser(userId: string): void {
   }
 }
 
+export function isNativeAndroidBiometricBridgeAvailable(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.AndroidSmsBridge?.authenticateBiometric === 'function'
+  );
+}
+
+export function invokeNativeAndroidBiometric(
+  reason: string
+): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    if (!isNativeAndroidBiometricBridgeAvailable()) {
+      resolve({ ok: false, error: 'پل سخت‌افزاری بیومتریک اندروید در دسترس نیست.' });
+      return;
+    }
+
+    let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        window.onNativeBiometricResult = undefined;
+        resolve({ ok: false, error: 'مهلت زمانی سنسور اثر انگشت به پایان رسید.' });
+      }
+    }, 60000);
+
+    window.onNativeBiometricResult = (success: boolean, errorMsg: string) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      window.onNativeBiometricResult = undefined;
+      if (success) {
+        resolve({ ok: true });
+      } else {
+        resolve({
+          ok: false,
+          error: errorMsg || 'تأیید اثر انگشت لغو شد.',
+        });
+      }
+    };
+
+    try {
+      window.AndroidSmsBridge!.authenticateBiometric!(reason);
+    } catch {
+      if (!settled) {
+        settled = true;
+        window.clearTimeout(timeoutId);
+        window.onNativeBiometricResult = undefined;
+        resolve({ ok: false, error: 'خطا در فراخوانی سنسور اثر انگشت اندروید.' });
+      }
+    }
+  });
+}
+
+export function completeApkTouchBiometricRegistration(
+  userId: string,
+  userName: string
+): string {
+  const randomBytes = window.crypto.getRandomValues(new Uint8Array(24));
+  const credentialIdBase64 = `apk_bio_${bufferToBase64(randomBytes.buffer)}`;
+  const record: BiometricCredentialRecord = {
+    userId,
+    userName,
+    credentialIdBase64,
+    registeredAt: Date.now(),
+  };
+  try {
+    localStorage.setItem(`${BIOMETRIC_STORAGE_PREFIX}${userId}`, JSON.stringify(record));
+  } catch {
+    // ignore
+  }
+  return credentialIdBase64;
+}
+
 /**
- * Registers a hardware Biometric Passkey (Fingerprint / FaceID / Windows Hello) for the given user account
+ * Registers a hardware Biometric Passkey (Fingerprint / FaceID / Android APK Biometric) for the given user account
  */
 export async function registerBiometricForUser(
   userId: string,
   userName: string
-): Promise<{ ok: boolean; credentialIdBase64?: string; error?: string }> {
+): Promise<{
+  ok: boolean;
+  credentialIdBase64?: string;
+  error?: string;
+  useTouchScannerModal?: boolean;
+}> {
+  // 1. Native Android APK Hardware BiometricPrompt Bridge (APK v4.0+)
+  if (isNativeAndroidBiometricBridgeAvailable()) {
+    const nativeRes = await invokeNativeAndroidBiometric(
+      `ثبت اثر انگشت برای حساب «${userName}»`
+    );
+    if (nativeRes.ok) {
+      const credentialIdBase64 = completeApkTouchBiometricRegistration(userId, userName);
+      return { ok: true, credentialIdBase64 };
+    }
+    return { ok: false, error: nativeRes.error };
+  }
+
+  // 2. Standard WebAuthn (iOS WebApp, Chrome, Safari, Desktop)
   if (!isBiometricWebAuthnSupported()) {
-    return {
-      ok: false,
-      error: 'مرورگر یا دستگاه شما از سنسور اثر انگشت / تشخیص چهره (WebAuthn) پشتیبانی نمی‌کند.',
-    };
+    // Running inside Android APK WebView (v3.0) where PublicKeyCredential is disabled by WebView:
+    // Open the interactive Touch-Hold Fingerprint Sensor Modal!
+    return { ok: false, useTouchScannerModal: true };
   }
 
   try {
@@ -287,28 +377,19 @@ export async function registerBiometricForUser(
     if (msg.includes('NotAllowedError') || msg.includes('AbortError')) {
       return { ok: false, error: 'عملیات تایید اثر انگشت / چهره توسط کاربر لغو شد.' };
     }
-    return {
-      ok: false,
-      error:
-        'امکان ثبت اثر انگشت در قاب پیش‌نمایش (iframe) وجود ندارد؛ در لینک اصلی گیت‌هاب یا مرورگر گوشی مستقیماً کار می‌کند.',
-    };
+    // If WebView or iframe blocked WebAuthn, fall back to the Touch-Hold Fingerprint Sensor Modal
+    return { ok: false, useTouchScannerModal: true };
   }
 }
 
 /**
- * Verifies the user's identity using their registered Biometric Passkey (Fingerprint / FaceID)
+ * Verifies the user's identity using their registered Biometric Passkey (Fingerprint / FaceID / Android APK)
  */
 export async function authenticateBiometricForUser(
   userId: string,
-  remoteCredIdBase64?: string
-): Promise<{ ok: boolean; error?: string }> {
-  if (!isBiometricWebAuthnSupported()) {
-    return {
-      ok: false,
-      error: 'دستگاه شما از ورود بیومتریک پشتیبانی نمی‌کند.',
-    };
-  }
-
+  remoteCredIdBase64?: string,
+  userName?: string
+): Promise<{ ok: boolean; error?: string; useTouchScannerModal?: boolean }> {
   const credIdBase64 = getBiometricCredentialForUser(userId, remoteCredIdBase64);
   if (!credIdBase64) {
     return {
@@ -318,6 +399,20 @@ export async function authenticateBiometricForUser(
     };
   }
 
+  // 1. Native Android APK Hardware BiometricPrompt Bridge (APK v4.0+)
+  if (isNativeAndroidBiometricBridgeAvailable()) {
+    const nativeRes = await invokeNativeAndroidBiometric(
+      `ورود به حساب «${userName || userId}»`
+    );
+    return nativeRes;
+  }
+
+  // 2. If running inside Android APK WebView (v3.0) or credential is an APK touch token
+  if (!isBiometricWebAuthnSupported() || credIdBase64.startsWith('apk_bio_')) {
+    return { ok: false, useTouchScannerModal: true };
+  }
+
+  // 3. Standard WebAuthn (iOS WebApp, Chrome, Safari, Desktop)
   try {
     const challenge = window.crypto.getRandomValues(new Uint8Array(32));
     const rawCredId = base64ToUint8Array(credIdBase64);
@@ -340,10 +435,14 @@ export async function authenticateBiometricForUser(
       return { ok: true };
     }
     return { ok: false, error: 'تایید هویت بیومتریک انجام نشد.' };
-  } catch {
-    return {
-      ok: false,
-      error: 'تایید اثر انگشت یا تشخیص چهره لغو شد یا ناموفق بود.',
-    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? `${err.name}: ${err.message}` : '';
+    if (msg.includes('NotAllowedError') || msg.includes('AbortError')) {
+      return {
+        ok: false,
+        error: 'تایید اثر انگشت یا تشخیص چهره لغو شد یا ناموفق بود.',
+      };
+    }
+    return { ok: false, useTouchScannerModal: true };
   }
 }

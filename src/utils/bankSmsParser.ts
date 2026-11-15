@@ -51,8 +51,11 @@ declare global {
       hasSmsPermission: () => boolean;
       requestSmsPermission: () => void;
       getRecentBankSms: (limit: number) => string; // JSON string of NativeAndroidSmsItem[]
+      isBiometricSupported?: () => boolean;
+      authenticateBiometric?: (reason: string) => void;
     };
     onNativeBankSmsReceived?: (smsJson: string) => void;
+    onNativeBiometricResult?: (success: boolean, errorMsg: string) => void;
   }
 }
 

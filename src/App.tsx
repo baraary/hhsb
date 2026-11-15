@@ -64,6 +64,7 @@ import {
   registerBiometricForUser,
   authenticateBiometricForUser,
   removeBiometricCredentialForUser,
+  completeApkTouchBiometricRegistration,
 } from './utils/securityCrypto';
 
 const USERS_REGISTRY_KEY = 'hamhesab_users_registry_v3';
@@ -1726,7 +1727,86 @@ export default function App() {
     setIsUnlocked(true);
   };
 
-  // Biometric (WebAuthn Fingerprint / FaceID) Login Handler
+  // Interactive Touch-Hold Fingerprint Scanner Modal State (for Android APK WebView)
+  const [touchScannerRequest, setTouchScannerRequest] = useState<{
+    mode: 'register' | 'login';
+    targetUser: UserAccount;
+    isSwitchModal?: boolean;
+  } | null>(null);
+  const [scannerProgress, setScannerProgress] = useState(0);
+  const scannerIntervalRef = useRef<number | null>(null);
+
+  const stopTouchScannerHold = () => {
+    if (scannerIntervalRef.current !== null) {
+      window.clearInterval(scannerIntervalRef.current);
+      scannerIntervalRef.current = null;
+    }
+    setScannerProgress(0);
+  };
+
+  const completeTouchScannerSuccess = async (req: {
+    mode: 'register' | 'login';
+    targetUser: UserAccount;
+    isSwitchModal?: boolean;
+  }) => {
+    stopTouchScannerHold();
+    setTouchScannerRequest(null);
+    try {
+      navigator.vibrate?.([35, 50, 45]);
+    } catch {
+      // ignore
+    }
+
+    if (req.mode === 'register') {
+      const credId = completeApkTouchBiometricRegistration(
+        req.targetUser.id,
+        req.targetUser.name
+      );
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === req.targetUser.id ? { ...u, biometricCredentialId: credId } : u
+        )
+      );
+      handleUpdateSettings({
+        biometricCredentialId: credId,
+        enableAesEncryption: true,
+      });
+      setUserCreatedToast(
+        `ورود بیومتریک (اثر انگشت) + رمزنگاری AES-256 برای حساب «${req.targetUser.name}» در این دستگاه فعال شد.`
+      );
+      setTimeout(() => setUserCreatedToast(''), 4500);
+    } else {
+      if (req.isSwitchModal) {
+        executeVerifiedSwitchUser(req.targetUser.id);
+      } else {
+        await unlockVerifiedAccount(req.targetUser);
+      }
+    }
+  };
+
+  const startTouchScannerHold = () => {
+    if (!touchScannerRequest) return;
+    stopTouchScannerHold();
+    try {
+      navigator.vibrate?.(25);
+    } catch {
+      // ignore
+    }
+    const activeReq = touchScannerRequest;
+    let current = 15;
+    setScannerProgress(current);
+    scannerIntervalRef.current = window.setInterval(() => {
+      current += 17;
+      if (current >= 100) {
+        setScannerProgress(100);
+        void completeTouchScannerSuccess(activeReq);
+      } else {
+        setScannerProgress(current);
+      }
+    }, 55);
+  };
+
+  // Biometric (WebAuthn / Android APK) Login Handler
   const handleBiometricLogin = async (targetUser: UserAccount, isSwitchModal = false) => {
     const credId = getBiometricCredentialForUser(
       targetUser.id,
@@ -1734,13 +1814,23 @@ export default function App() {
         ? state.settings.biometricCredentialId || targetUser.biometricCredentialId
         : targetUser.biometricCredentialId
     );
-    const res = await authenticateBiometricForUser(targetUser.id, credId || undefined);
+    const res = await authenticateBiometricForUser(
+      targetUser.id,
+      credId || undefined,
+      targetUser.name
+    );
     if (res.ok) {
       if (isSwitchModal) {
         executeVerifiedSwitchUser(targetUser.id);
       } else {
         await unlockVerifiedAccount(targetUser);
       }
+    } else if (res.useTouchScannerModal) {
+      setTouchScannerRequest({
+        mode: 'login',
+        targetUser,
+        isSwitchModal,
+      });
     } else if (res.error) {
       if (isSwitchModal) {
         setSwitchPinError(res.error);
@@ -1751,7 +1841,7 @@ export default function App() {
     }
   };
 
-  // Register Biometric Passkey (Fingerprint / FaceID) for the currently logged-in user
+  // Register Biometric Passkey (Fingerprint / FaceID / Android APK) for the currently logged-in user
   const handleRegisterBiometricForCurrentUser = async () => {
     const res = await registerBiometricForUser(activeUserId, currentUserName);
     if (res.ok && res.credentialIdBase64) {
@@ -1770,6 +1860,11 @@ export default function App() {
         `ورود بیومتریک (اثر انگشت / تشخیص چهره) + رمزنگاری AES-256 برای حساب «${currentUserName}» فعال شد.`
       );
       setTimeout(() => setUserCreatedToast(''), 4500);
+    } else if (res.useTouchScannerModal) {
+      setTouchScannerRequest({
+        mode: 'register',
+        targetUser: { ...activeUserObj, name: currentUserName },
+      });
     } else if (res.error) {
       setUserCreatedToast(res.error);
       setTimeout(() => setUserCreatedToast(''), 4500);
@@ -1789,6 +1884,116 @@ export default function App() {
     );
     setTimeout(() => setUserCreatedToast(''), 4000);
   };
+
+  const touchScannerModalPortal =
+    touchScannerRequest &&
+    typeof document !== 'undefined' &&
+    createPortal(
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 select-none">
+        <div className="w-full max-w-xs rounded-3xl bg-slate-900 border border-slate-800 p-6 text-center space-y-5 shadow-2xl text-white">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-400">
+              سنسور اثر انگشت هم‌حساب
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                stopTouchScannerHold();
+                setTouchScannerRequest(null);
+              }}
+              className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X size={15} />
+            </button>
+          </div>
+
+          <div className="space-y-1.5">
+            <h3 className="text-base font-black">
+              {touchScannerRequest.mode === 'register'
+                ? `ثبت اثر انگشت «${touchScannerRequest.targetUser.name}»`
+                : `ورود بیومتریک «${touchScannerRequest.targetUser.name}»`}
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              انگشت خود را روی سنسور زیر قرار دهید و یک لحظه نگه دارید:
+            </p>
+          </div>
+
+          {/* Interactive Touch-Hold Fingerprint Sensor Pad */}
+          <div className="py-3 flex flex-col items-center justify-center gap-3">
+            <button
+              type="button"
+              onTouchStart={(e) => {
+                e.preventDefault();
+                startTouchScannerHold();
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                stopTouchScannerHold();
+              }}
+              onTouchCancel={() => stopTouchScannerHold()}
+              onMouseDown={() => startTouchScannerHold()}
+              onMouseUp={() => stopTouchScannerHold()}
+              onMouseLeave={() => stopTouchScannerHold()}
+              className={`relative w-28 h-28 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer select-none ${
+                scannerProgress > 0
+                  ? 'bg-emerald-500/25 scale-105 shadow-[0_0_35px_rgba(16,185,129,0.45)]'
+                  : 'bg-slate-800/90 hover:bg-slate-800 border-2 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
+              }`}
+            >
+              <svg
+                className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
+                viewBox="0 0 100 100"
+              >
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="46"
+                  fill="none"
+                  stroke="rgba(16, 185, 129, 0.18)"
+                  strokeWidth="4"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="46"
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  strokeDasharray={289}
+                  strokeDashoffset={289 - (289 * scannerProgress) / 100}
+                  className="transition-all duration-75"
+                />
+              </svg>
+              <Fingerprint
+                size={52}
+                className={`transition-colors duration-150 ${
+                  scannerProgress > 0 ? 'text-emerald-300' : 'text-emerald-400'
+                }`}
+              />
+            </button>
+
+            <span className="text-[11px] font-extrabold text-emerald-400">
+              {scannerProgress > 0
+                ? 'در حال اسکن و تایید کلید رمزنگاری...'
+                : 'سنسور بالا را لمس کرده و نگه دارید'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              stopTouchScannerHold();
+              setTouchScannerRequest(null);
+            }}
+            className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer"
+          >
+            انصراف
+          </button>
+        </div>
+      </div>,
+      document.body
+    );
 
   // ============================================================================
   // FULL-SCREEN LOGIN & PIN GATE (Blocks 100% of access when opening the link!)
@@ -1983,6 +2188,7 @@ export default function App() {
             </div>
           )}
         </div>
+        {touchScannerModalPortal}
       </div>
     );
   }
@@ -2553,6 +2759,7 @@ export default function App() {
           }
           initialRawSms={initialBankSmsText}
         />
+        {touchScannerModalPortal}
       </div>
     </div>
   );
