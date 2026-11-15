@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Palette, Shuffle, Plus, X, Check } from 'lucide-react';
+import { Palette, Shuffle, Plus, X, Check, Banknote, ListFilter } from 'lucide-react';
 import {
   AppState,
   BankCard,
   CardColorThemeId,
   CardPatternId,
   IranianBankId,
+  Transaction,
 } from '../types';
 import { BankCardVisual } from './BankCardVisual';
 import {
@@ -21,23 +22,40 @@ import {
   pickRandomCardStyle,
   resolveCardPattern,
 } from '../utils/cardThemesAndPatterns';
-import { formatMoney, toEnglishDigits, toPersianDigits } from '../utils/persian';
+import {
+  formatMoney,
+  formatJalaliReadable,
+  toEnglishDigits,
+  toPersianDigits,
+} from '../utils/persian';
 import { CircularIcon } from './CircularIcon';
 
 interface CardsViewProps {
   state: AppState;
   onSaveCard: (card: Omit<BankCard, 'id'>, existingId?: string) => void;
   onDeleteCard: (id: string) => void;
+  onUpdateCashBalance: (newInitialCash: number) => void;
+  onEditTransaction?: (tx: Transaction) => void;
 }
 
 export const CardsView: React.FC<CardsViewProps> = ({
   state,
   onSaveCard,
   onDeleteCard,
+  onUpdateCashBalance,
+  onEditTransaction,
 }) => {
-  const { cards, transactions, settings } = state;
+  const { cards, transactions, categories, settings } = state;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<BankCard | null>(null);
+
+  // Cash Balance editor state
+  const [isEditingCash, setIsEditingCash] = useState(false);
+  const [cashEditMode, setCashEditMode] = useState<'add' | 'set'>('add');
+  const [cashInputStr, setCashInputStr] = useState('');
+
+  // Selected source ('all' | 'cash' | card.id) for viewing transactions broken down by cards & cash
+  const [selectedSourceId, setSelectedSourceId] = useState<string>('all');
 
   // Form states
   const [title, setTitle] = useState('');
@@ -491,6 +509,39 @@ export const CardsView: React.FC<CardsViewProps> = ({
         )
       : null;
 
+  // Live Cash Balance calculations
+  const initialCash = settings.initialCashBalance || 0;
+  const cashIncomes = transactions
+    .filter((t) => t.cardId === 'cash' && t.type === 'income')
+    .reduce((s, t) => s + t.amount, 0);
+  const cashExpenses = transactions
+    .filter((t) => t.cardId === 'cash' && t.type === 'expense')
+    .reduce((s, t) => s + t.amount, 0);
+  const currentCashBalance = initialCash + cashIncomes - cashExpenses;
+  const cashTransactionsCount = transactions.filter((t) => t.cardId === 'cash').length;
+
+  const handleSaveCashForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    const numeric = parseInt(toEnglishDigits(cashInputStr).replace(/\D/g, '') || '0', 10);
+    if (cashEditMode === 'add') {
+      if (numeric <= 0) return;
+      onUpdateCashBalance(initialCash + numeric);
+    } else {
+      const targetInitial = numeric - cashIncomes + cashExpenses;
+      onUpdateCashBalance(targetInitial);
+    }
+    setCashInputStr('');
+    setIsEditingCash(false);
+  };
+
+  const sourceTransactions = [...transactions]
+    .filter((t) => (selectedSourceId === 'all' ? true : t.cardId === selectedSourceId))
+    .sort((a, b) => {
+      const dCmp = b.jalaliDate.localeCompare(a.jalaliDate);
+      if (dCmp !== 0) return dCmp;
+      return b.time.localeCompare(a.time);
+    });
+
   return (
     <div className="space-y-6 pb-8">
       {/* Header */}
@@ -499,15 +550,28 @@ export const CardsView: React.FC<CardsViewProps> = ({
           <CircularIcon name="credit-card" size="md" color="#0ea5e9" />
           <div>
             <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
-              کارت‌های بانکی شیشه‌ای ({toPersianDigits(cards.length)} کارت)
+              کارت‌های بانکی شیشه‌ای ({toPersianDigits(cards.length)} کارت) و موجودی نقدی
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              طراحی شیشه‌ای مات (Glassmorphic) + ۲۵ طیف رنگی پاستیلی و ۲۰ پترن وکتور
+              مدیریت کارت‌ها، کیف پول نقدی و مشاهده ریز تراکنش‌ها به تفکیک هر کارت و نقد
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setIsEditingCash((prev) => !prev);
+              setCashEditMode('add');
+              setCashInputStr('');
+            }}
+            className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-sm transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <Banknote size={15} />
+            <span>افزودن / تنظیم موجودی نقدی</span>
+          </button>
+
           <button
             type="button"
             onClick={openAddModal}
@@ -517,6 +581,143 @@ export const CardsView: React.FC<CardsViewProps> = ({
             <span>افزودن کارت بانکی جدید</span>
           </button>
         </div>
+      </div>
+
+      {/* Dedicated Cash Wallet Card (کیف پول نقدی) */}
+      <div className="rounded-3xl bg-gradient-to-br from-emerald-600 via-teal-600 to-slate-900 text-white p-5 shadow-lg relative overflow-hidden space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-white/15 backdrop-blur-xs flex items-center justify-center border border-white/25">
+              <Banknote size={22} className="text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-black">
+                  کیف پول نقدی (موجودی نقد)
+                </h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 font-bold tabular-nums">
+                  {toPersianDigits(cashTransactionsCount)} تراکنش نقدی
+                </span>
+              </div>
+              <p className="text-xs text-white/80 mt-0.5 tabular-nums">
+                ورودی نقد: +{formatMoney(cashIncomes)} · هزینه نقد: -{formatMoney(cashExpenses)} {settings.currencyUnit}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3">
+            <div className="text-right sm:text-left tabular-nums">
+              <span className="text-[10px] text-white/75 block">موجودی نقدی فعلی</span>
+              <span className="text-xl sm:text-2xl font-black">
+                {formatMoney(currentCashBalance)}{' '}
+                <span className="text-xs font-semibold">{settings.currencyUnit}</span>
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingCash((prev) => !prev);
+                  setCashEditMode('add');
+                  setCashInputStr('');
+                }}
+                className="px-3 py-2 rounded-xl bg-white text-emerald-950 text-xs font-extrabold cursor-pointer flex items-center gap-1 shadow-xs"
+              >
+                <Plus size={14} strokeWidth={2.5} />
+                <span>افزایش موجودی نقد</span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedSourceId(selectedSourceId === 'cash' ? 'all' : 'cash')
+                }
+                className="px-3 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold cursor-pointer"
+              >
+                {selectedSourceId === 'cash' ? 'نمایش همه' : 'مشاهده تراکنش‌های نقد'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {isEditingCash && (
+          <form
+            onSubmit={handleSaveCashForm}
+            className="p-3.5 rounded-2xl bg-black/25 backdrop-blur-md border border-white/20 space-y-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-extrabold text-white">
+                مدیریت موجودی نقدی کیف پول:
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCashEditMode('add')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                    cashEditMode === 'add'
+                      ? 'bg-white text-emerald-950'
+                      : 'bg-white/15 text-white'
+                  }`}
+                >
+                  + افزودن به موجودی نقد فعلی
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCashEditMode('set');
+                    setCashInputStr(String(Math.max(0, currentCashBalance)));
+                  }}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                    cashEditMode === 'set'
+                      ? 'bg-white text-emerald-950'
+                      : 'bg-white/15 text-white'
+                  }`}
+                >
+                  تنظیم دقیق کل موجودی نقد
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoFocus
+                value={
+                  cashInputStr
+                    ? formatMoney(
+                        parseInt(toEnglishDigits(cashInputStr).replace(/\D/g, '') || '0', 10)
+                      )
+                    : ''
+                }
+                onChange={(e) =>
+                  setCashInputStr(toEnglishDigits(e.target.value).replace(/\D/g, ''))
+                }
+                placeholder={
+                  cashEditMode === 'add'
+                    ? `مبلغ مورد نظر برای افزودن به موجودی نقدی (${settings.currencyUnit})...`
+                    : `مبلغ کل موجودی نقدی جدید (${settings.currencyUnit})...`
+                }
+                className="flex-1 px-3.5 py-2 rounded-xl bg-white text-slate-900 text-xs font-extrabold tabular-nums"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 text-xs font-black cursor-pointer"
+                >
+                  ذخیره موجودی نقدی
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCash(false)}
+                  className="px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-bold cursor-pointer"
+                >
+                  انصراف
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
       </div>
 
       {/* Bank Cards Grid */}
@@ -541,6 +742,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
             const activePatternMeta = CARD_VECTOR_PATTERNS.find(
               (p) => p.id === resolveCardPattern(card)
             );
+            const isSelectedForTx = selectedSourceId === card.id;
             return (
               <div key={card.id} className="space-y-1.5">
                 <BankCardVisual
@@ -551,11 +753,22 @@ export const CardsView: React.FC<CardsViewProps> = ({
                   onEdit={openEditModal}
                   onRandomizeStyle={handleQuickRandomizeCard}
                 />
-                <div className="px-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <div className="px-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                   <div className="flex items-center gap-2">
-                    <span>{toPersianDigits(cardTxs.length)} تراکنش</span>
-                    <span>·</span>
-                    <span className="text-[11px] text-slate-400">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedSourceId(isSelectedForTx ? 'all' : card.id)
+                      }
+                      className={`px-2.5 py-1 rounded-lg font-extrabold cursor-pointer transition-colors ${
+                        isSelectedForTx
+                          ? 'theme-bg text-white'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      مشاهده تراکنش‌ها ({toPersianDigits(cardTxs.length)})
+                    </button>
+                    <span className="text-[11px] text-slate-400 hidden sm:inline">
                       پترن: {activePatternMeta?.name || 'موج‌های ابریشمی'}
                     </span>
                   </div>
@@ -565,7 +778,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
                       onClick={() => openEditModal(card)}
                       className="text-slate-600 dark:text-slate-300 hover:underline font-bold cursor-pointer"
                     >
-                      تغییر رنگ و پترن
+                      ویرایش کارت
                     </button>
                     {cards.length > 1 && (
                       <button
@@ -583,6 +796,145 @@ export const CardsView: React.FC<CardsViewProps> = ({
           })}
         </div>
       )}
+
+      {/* Breakdown of Transactions by Bank Card and Cash Balance */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-sky-500/10 text-sky-500 flex items-center justify-center">
+              <ListFilter size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                ریز تراکنش‌ها به تفکیک کارت‌ها و موجودی نقدی
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                انتخاب هر کارت بانکی یا کیف پول نقدی برای بررسی واریزها و برداشت‌های همان حساب
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Selector Bar */}
+        <div
+          data-no-swipe="true"
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+          className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 overflow-x-auto max-w-full touch-pan-x"
+        >
+          <button
+            type="button"
+            onClick={() => setSelectedSourceId('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer whitespace-nowrap shrink-0 ${
+              selectedSourceId === 'all'
+                ? 'theme-bg text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            همه کارت‌ها و نقدی ({toPersianDigits(transactions.length)})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedSourceId('cash')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+              selectedSourceId === 'cash'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-white/70 dark:bg-slate-900/60 text-emerald-700 dark:text-emerald-400'
+            }`}
+          >
+            <Banknote size={13} />
+            <span>موجودی نقدی ({toPersianDigits(cashTransactionsCount)})</span>
+          </button>
+
+          {cards.map((c) => {
+            const cCount = transactions.filter((t) => t.cardId === c.id).length;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedSourceId(c.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                  selectedSourceId === c.id
+                    ? 'theme-bg text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                <BankLogoVector bankId={c.bankId} size={16} />
+                <span>
+                  {c.title} ({toPersianDigits(cCount)})
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Transactions for the selected Card or Cash Wallet */}
+        {sourceTransactions.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-400">
+            هیچ تراکنشی برای این حساب ثبت نشده است.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {sourceTransactions.map((tx) => {
+              const cat = categories.find((c) => c.id === tx.categoryId);
+              const sub = cat?.subCategories.find((s) => s.id === tx.subCategoryId);
+              const isCash = tx.cardId === 'cash';
+              const cardObj = cards.find((c) => c.id === tx.cardId);
+
+              return (
+                <div
+                  key={tx.id}
+                  onClick={() => onEditTransaction && onEditTransaction(tx)}
+                  className="py-3 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 px-2 -mx-2 rounded-xl cursor-pointer"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <CircularIcon
+                      name={cat?.icon || 'layers'}
+                      color={cat?.color || '#10b981'}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                        {tx.title}
+                      </h4>
+                      <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                        <span>{cat?.name || 'سایر'}</span>
+                        {sub && <span>· {sub.name}</span>}
+                        <span>·</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">
+                          {isCash ? 'موجودی نقدی' : cardObj?.title || 'کارت بانکی'}
+                        </span>
+                        <span>·</span>
+                        <span>
+                          {formatJalaliReadable(tx.jalaliDate)} ({toPersianDigits(tx.time)})
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-left shrink-0 tabular-nums">
+                    <div
+                      className={`text-xs sm:text-sm font-black ${
+                        tx.type === 'expense'
+                          ? 'text-rose-600 dark:text-rose-400'
+                          : 'text-emerald-600 dark:text-emerald-400'
+                      }`}
+                    >
+                      {tx.type === 'expense' ? '-' : '+'}
+                      {formatMoney(tx.amount)}
+                    </div>
+                    <span className="text-[10px] text-slate-400">
+                      {settings.currencyUnit}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {modalNode}
     </div>

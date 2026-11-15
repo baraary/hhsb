@@ -69,7 +69,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setCategoryId(defaultCat?.id || '');
       setSubCategoryId(defaultCat?.subCategories[0]?.id || '');
       setSelectedTags([]);
-      setCardId(defaultCard?.id || '');
+      setCardId(defaultCard?.id || 'cash');
       setJalaliDate(getCurrentJalaliDateStr());
       setTime(getCurrentTimeStr());
       setNote('');
@@ -119,7 +119,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       return;
     }
     if (!cardId) {
-      setError('لطفاً کارت بانکی را انتخاب کنید.');
+      setError('لطفاً کارت بانکی یا موجودی نقدی را انتخاب کنید.');
       return;
     }
 
@@ -148,6 +148,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const numericAmountPreview = parseInt(amountStr || '0', 10);
 
+  // Calculate live cash balance for display inside the modal
+  const initialCash = settings.initialCashBalance || 0;
+  const cashInc = state.transactions
+    .filter((t) => t.cardId === 'cash' && t.type === 'income')
+    .reduce((s, t) => s + t.amount, 0);
+  const cashExp = state.transactions
+    .filter((t) => t.cardId === 'cash' && t.type === 'expense')
+    .reduce((s, t) => s + t.amount, 0);
+  const currentCashBalance = initialCash + cashInc - cashExp;
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
       <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col">
@@ -166,7 +176,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   {editingTransaction ? 'ویرایش تراکنش مالی' : 'ثبت دخل و خرج جدید'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  ثبت سریع هزینه یا درآمد با دسته‌بندی ریز و کارت بانکی
+                  ثبت سریع هزینه یا درآمد با دسته‌بندی ریز، کارت بانکی یا موجودی نقدی
                 </p>
               </div>
             </div>
@@ -317,12 +327,43 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           )}
 
-          {/* Bank Card Selection */}
+          {/* Bank Card or Cash Balance Selection */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-              انتخاب کارت بانکی
+              انتخاب کارت بانکی یا موجودی نقدی
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Cash Wallet Option */}
+              <button
+                type="button"
+                onClick={() => setCardId('cash')}
+                className={`flex items-center justify-between p-3 rounded-2xl border text-right transition-all cursor-pointer ${
+                  cardId === 'cash'
+                    ? 'border-emerald-500 bg-emerald-500/10 dark:bg-emerald-500/15 ring-1 ring-emerald-500/40'
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CircularIcon
+                    name="wallet"
+                    size="sm"
+                    color="#10b981"
+                    variant={cardId === 'cash' ? 'solid' : 'soft'}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                      موجودی نقدی (کیف پول نقد)
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                      موجودی نقد: {formatMoney(currentCashBalance)} {settings.currencyUnit}
+                    </div>
+                  </div>
+                </div>
+                {cardId === 'cash' && (
+                  <CircularIcon name="check" size="xs" color="#10b981" variant="solid" />
+                )}
+              </button>
+
               {cards.map((card) => {
                 const isSelected = cardId === card.id;
                 const bank = IRANIAN_BANKS[card.bankId] || IRANIAN_BANKS.other;

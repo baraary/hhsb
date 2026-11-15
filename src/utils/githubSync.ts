@@ -1,4 +1,5 @@
 import { AppState, GitHubSyncConfig } from '../types';
+import { computeSaltedPinHash, encryptUserVault } from './securityCrypto';
 
 const VAULT_SECRET = 'HamHesab_Hootan_Fatemeh_SyncVault_2026';
 
@@ -258,12 +259,23 @@ async function executePushToGitHub(
         }
       }
 
+      const activeUid = safeStateToSave.userId || 'hootan';
+      const activePin = safeStateToSave.settings?.pinCode || '';
+      const computedPinHash = activePin
+        ? await computeSaltedPinHash(activeUid, activePin)
+        : safeStateToSave.settings?.pinHash;
+      const computedVault = activePin
+        ? await encryptUserVault(safeStateToSave, activeUid, activePin)
+        : safeStateToSave.encryptedVault;
+
       const stateToSave = {
         ...safeStateToSave,
         updatedAt: safeStateToSave.updatedAt || Date.now(),
         syncVault: encodeSyncToken(token),
+        ...(computedVault ? { encryptedVault: computedVault } : {}),
         settings: {
           ...safeStateToSave.settings,
+          ...(computedPinHash ? { pinHash: computedPinHash } : {}),
           githubSync: {
             ...safeStateToSave.settings.githubSync,
             enabled: true,

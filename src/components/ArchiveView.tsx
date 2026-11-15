@@ -28,6 +28,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedTagId, setSelectedTagId] = useState<string>('all');
+  const [selectedCardId, setSelectedCardId] = useState<string>('all');
 
   // Smart Search Bar Filters: Title, Amount Range, Date Range
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -46,7 +47,8 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
     minAmount > 0 ||
     maxAmount > 0 ||
     Boolean(cleanFromDate) ||
-    Boolean(cleanToDate);
+    Boolean(cleanToDate) ||
+    selectedCardId !== 'all';
 
   const clearSmartFilters = () => {
     setSearchQuery('');
@@ -54,11 +56,13 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
     setMaxAmountStr('');
     setFromDateStr('');
     setToDateStr('');
+    setSelectedCardId('all');
   };
 
   const monthFiltered = transactions.filter((tx) => {
     if (selectedMonth !== 'all' && getMonthKey(tx.jalaliDate) !== selectedMonth) return false;
     if (selectedTagId !== 'all' && !tx.tags.includes(selectedTagId)) return false;
+    if (selectedCardId !== 'all' && tx.cardId !== selectedCardId) return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
@@ -338,6 +342,52 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Card & Cash Balance Filter Strip in Archive */}
+      <div
+        data-no-swipe="true"
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
+        className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 overflow-x-auto max-w-full touch-pan-x"
+      >
+        <button
+          type="button"
+          onClick={() => setSelectedCardId('all')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer whitespace-nowrap shrink-0 ${
+            selectedCardId === 'all'
+              ? 'theme-bg text-white'
+              : 'text-slate-600 dark:text-slate-400'
+          }`}
+        >
+          همه کارت‌ها و نقدی
+        </button>
+        <button
+          type="button"
+          onClick={() => setSelectedCardId('cash')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer whitespace-nowrap shrink-0 ${
+            selectedCardId === 'cash'
+              ? 'bg-emerald-600 text-white'
+              : 'text-emerald-700 dark:text-emerald-400'
+          }`}
+        >
+          موجودی نقدی (کیف پول نقد)
+        </button>
+        {cards.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => setSelectedCardId(c.id)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer whitespace-nowrap shrink-0 ${
+              selectedCardId === c.id
+                ? 'theme-bg text-white'
+                : 'text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            {c.title}
+          </button>
+        ))}
       </div>
 
       {/* Direct Filtered Transactions Results when Smart Search is Active */}

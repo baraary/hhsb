@@ -10,6 +10,8 @@ import {
   Award,
   ChevronDown,
   ChevronUp,
+  Clock,
+  Banknote,
 } from 'lucide-react';
 import {
   AppState,
@@ -42,6 +44,7 @@ interface HomeViewProps {
   onToggleReminderPaid: (id: string) => void;
   onStepReminderInstallment: (id: string, delta: 1 | -1) => void;
   onDeleteReminder: (id: string) => void;
+  onUpdateCashBalance: (newInitialCash: number) => void;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
@@ -56,6 +59,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onToggleReminderPaid,
   onStepReminderInstallment,
   onDeleteReminder,
+  onUpdateCashBalance,
 }) => {
   const { transactions, cards, categories, tags, reminders = [], settings } = state;
   const userName = settings.userName || settings.hootanName || 'کاربر';
@@ -63,6 +67,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [typeFilter, setTypeFilter] = useState<'all' | 'expense' | 'income'>('all');
   const [cardFilter, setCardFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Cash Balance quick add/edit state
+  const [isEditingCash, setIsEditingCash] = useState(false);
+  const [cashMode, setCashMode] = useState<'add' | 'set'>('add');
+  const [cashInputStr, setCashInputStr] = useState('');
+
+  // Today's Vertical Timeline filter state (based on updatedAt)
+  const [timelineScope, setTimelineScope] = useState<'today' | 'last24h' | 'latestDay'>('today');
+  const [timelineHourFilter, setTimelineHourFilter] = useState<'all' | 'morning' | 'afternoon' | 'night'>('all');
 
   // Reminder Hub states
   const [reminderTab, setReminderTab] = useState<'scheduled' | 'tagged'>('scheduled');
@@ -96,10 +109,36 @@ export const HomeView: React.FC<HomeViewProps> = ({
     return initialBalance + cInc - cExp;
   };
 
-  const totalNetWorth = cards.reduce(
+  // Calculate live Cash Balance (موجودی نقدی)
+  const initialCashBalance = settings.initialCashBalance || 0;
+  const cashIncomeTotal = transactions
+    .filter((t) => t.cardId === 'cash' && t.type === 'income')
+    .reduce((s, t) => s + t.amount, 0);
+  const cashExpenseTotal = transactions
+    .filter((t) => t.cardId === 'cash' && t.type === 'expense')
+    .reduce((s, t) => s + t.amount, 0);
+  const currentCashBalance = initialCashBalance + cashIncomeTotal - cashExpenseTotal;
+
+  const cardsTotalBalance = cards.reduce(
     (sum, c) => sum + getCardCurrentBalance(c.id, c.initialBalance),
     0
   );
+  const totalNetWorth = cardsTotalBalance + currentCashBalance;
+
+  const handleSaveCashAdjustment = (e: React.FormEvent) => {
+    e.preventDefault();
+    const numeric = parseInt(toEnglishDigits(cashInputStr).replace(/\D/g, '') || '0', 10);
+    if (cashMode === 'add') {
+      if (numeric <= 0) return;
+      onUpdateCashBalance(initialCashBalance + numeric);
+    } else {
+      // Set exact current cash balance by adjusting initialCashBalance
+      const targetInitial = numeric - cashIncomeTotal + cashExpenseTotal;
+      onUpdateCashBalance(targetInitial);
+    }
+    setCashInputStr('');
+    setIsEditingCash(false);
+  };
 
   const totalIncome = transactions
     .filter((t) => t.type === 'income')
@@ -147,6 +186,77 @@ export const HomeView: React.FC<HomeViewProps> = ({
       if (dateCmp !== 0) return dateCmp;
       return b.time.localeCompare(a.time);
     });
+
+  // ============================================================================
+  // VERTICAL TIMELINE FOR TODAY'S TRANSACTIONS BY HOUR (FILTERED BY updatedAt)
+  // ============================================================================
+  const todayJalaliStr = getCurrentJalaliDateStr();
+  const nowDateObj = new Date();
+  const isSameDayAsNow = (timestamp: number) => {
+    if (!timestamp) return false;
+    const d = new Date(timestamp);
+    return (
+      d.getFullYear() === nowDateObj.getFullYear() &&
+      d.getMonth() === nowDateObj.getMonth() &&
+      d.getDate() === nowDateObj.getDate()
+    );
+  };
+
+  // Extract hour (0..23) from updatedAt timestamp (or fallback to tx.time)
+  const getTxUpdatedHourAndMinute = (tx: Transaction): { hour: number; timeLabel: string; ts: number } => {
+    const ts = tx.updatedAt || tx.createdAt || 0;
+    if (ts > 0) {
+      const d = new Date(ts);
+      const hh = d.getHours();
+      const mm = d.getMinutes();
+      const formatted = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      return { hour: hh, timeLabel: formatted, ts };
+    }
+    const parts = toEnglishDigits(tx.time || '12:00').split(':');
+    const hh = Math.min(23, Math.max(0, parseInt(parts[0] || '12', 10) || 0));
+    return { hour: hh, timeLabel: tx.time || '12:00', ts: 0 };
+  };
+
+  const latestTxJalaliDate =
+    transactions.length > 0
+      ? [...transactions].sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))[0]
+          ?.jalaliDate || todayJalaliStr
+      : todayJalaliStr;
+
+  const timelineTransactions = [...transactions]
+    .filter((tx) => {
+      const ts = tx.updatedAt || tx.createdAt || 0;
+      if (timelineScope === 'today') {
+        return isSameDayAsNow(ts) || tx.jalaliDate === todayJalaliStr;
+      }
+      if (timelineScope === 'last24h') {
+        return ts > 0 && Date.now() - ts <= 24 * 60 * 60 * 1000;
+      }
+      // 'latestDay': matches most recently updated day's transactions
+      return tx.jalaliDate === latestTxJalaliDate;
+    })
+    .filter((tx) => {
+      if (timelineHourFilter === 'all') return true;
+      const { hour } = getTxUpdatedHourAndMinute(tx);
+      if (timelineHourFilter === 'morning') return hour >= 0 && hour < 12;
+      if (timelineHourFilter === 'afternoon') return hour >= 12 && hour < 18;
+      if (timelineHourFilter === 'night') return hour >= 18 && hour <= 23;
+      return true;
+    })
+    .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+
+  // Group timeline transactions by Hour bucket (e.g. ساعت ۱۴:۰۰)
+  const timelineHourGroups = React.useMemo(() => {
+    const groupsMap = new Map<number, { hour: number; items: { tx: Transaction; timeLabel: string; ts: number }[] }>();
+    for (const tx of timelineTransactions) {
+      const info = getTxUpdatedHourAndMinute(tx);
+      if (!groupsMap.has(info.hour)) {
+        groupsMap.set(info.hour, { hour: info.hour, items: [] });
+      }
+      groupsMap.get(info.hour)!.items.push({ tx, timeLabel: info.timeLabel, ts: info.ts });
+    }
+    return Array.from(groupsMap.values()).sort((a, b) => b.hour - a.hour);
+  }, [timelineTransactions]);
 
   const budgetPercent =
     settings.monthlyTotalBudget > 0
@@ -210,7 +320,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   return (
     <div className="space-y-6 pb-8">
-      {/* Top Hero Balance & Personal Cards Summary Grid */}
+      {/* Top Hero Balance & Personal Cards + Cash Summary Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* Main Hero Balance Card (Slim & Compact) */}
         <div className="lg:col-span-7 rounded-2xl sm:rounded-3xl theme-gradient text-white px-4 py-3.5 sm:px-5 sm:py-4 shadow-lg relative overflow-hidden flex flex-col justify-between">
@@ -222,7 +332,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <CircularIcon name="wallet" size="sm" variant="glass" />
               <div>
                 <span className="text-[11px] sm:text-xs text-white/90 font-bold block leading-tight">
-                  موجودی کل کیف پول {userName} ({toPersianDigits(cards.length)} کارت)
+                  موجودی کل دارایی {userName} ({toPersianDigits(cards.length)} کارت + موجودی نقدی)
                 </span>
                 <span className="text-[10px] sm:text-[11px] font-medium text-white/80">
                   دوره فعلی · {formatMonthKeyReadable(latestMonth)}
@@ -252,13 +362,30 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div className="relative z-10 my-2.5 sm:my-3 flex flex-col sm:flex-row sm:items-end justify-between gap-2.5">
-            <div className="flex items-baseline gap-1.5">
-              <h2 className="text-2xl sm:text-3xl font-black tabular-nums tracking-tight leading-none">
-                {formatMoney(totalNetWorth)}
-              </h2>
-              <span className="text-xs font-medium text-white/85">
-                {settings.currencyUnit}
-              </span>
+            <div>
+              <div className="flex items-baseline gap-1.5">
+                <h2 className="text-2xl sm:text-3xl font-black tabular-nums tracking-tight leading-none">
+                  {formatMoney(totalNetWorth)}
+                </h2>
+                <span className="text-xs font-medium text-white/85">
+                  {settings.currencyUnit}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-white/85 mt-1.5 tabular-nums">
+                <span>جمع کارت‌ها: {formatMoney(cardsTotalBalance)}</span>
+                <span>·</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingCash(true);
+                    setCashMode('add');
+                    setCashInputStr('');
+                  }}
+                  className="underline decoration-white/50 hover:decoration-white font-extrabold cursor-pointer"
+                >
+                  موجودی نقدی: {formatMoney(currentCashBalance)} {settings.currencyUnit} (+ افزایش نقد)
+                </button>
+              </div>
             </div>
 
             {/* Budget Progress Bar */}
@@ -306,17 +433,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         </div>
 
-        {/* Right Card: Bank Cards Live Balances Summary */}
+        {/* Right Card: Bank Cards & Cash Wallet Live Balances Summary */}
         <div className="lg:col-span-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 px-4 py-3.5 sm:px-5 sm:py-4 flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CircularIcon name="credit-card" size="xs" color="#0ea5e9" />
               <div>
                 <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
-                  موجودی کارت‌های بانکی {userName}
+                  موجودی کارت‌ها و نقدی {userName}
                 </h3>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  سهم هر کارت از کل موجودی کیف پول شما
+                  برای مشاهده تراکنش‌های هر کارت یا نقدی، روی آن کلیک کنید
                 </p>
               </div>
             </div>
@@ -331,12 +458,132 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </button>
           </div>
 
+          {/* Dedicated Cash Balance Row + Inline Quick Adder */}
+          <div className="p-2.5 rounded-2xl bg-emerald-500/8 dark:bg-emerald-500/12 border border-emerald-500/25 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setCardFilter(cardFilter === 'cash' ? 'all' : 'cash')}
+                className="flex items-center gap-2 min-w-0 text-right cursor-pointer"
+                title="مشاهده تراکنش‌های نقدی"
+              >
+                <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                  <Banknote size={15} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-extrabold text-slate-900 dark:text-white flex items-center gap-1">
+                    <span>موجودی نقدی (کیف پول نقد)</span>
+                    {cardFilter === 'cash' && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500 text-white">
+                        فیلتر فعال
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 tabular-nums">
+                    {toPersianDigits(transactions.filter((t) => t.cardId === 'cash').length)} تراکنش نقدی
+                  </div>
+                </div>
+              </button>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-xs font-black tabular-nums text-emerald-700 dark:text-emerald-300">
+                  {formatMoney(currentCashBalance)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingCash((prev) => !prev);
+                    setCashMode('add');
+                    setCashInputStr('');
+                  }}
+                  className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-extrabold cursor-pointer flex items-center gap-0.5"
+                  title="افزودن یا ویرایش موجودی نقدی"
+                >
+                  <Plus size={11} strokeWidth={2.6} />
+                  <span>افزودن نقد</span>
+                </button>
+              </div>
+            </div>
+
+            {isEditingCash && (
+              <form
+                onSubmit={handleSaveCashAdjustment}
+                className="pt-2 border-t border-emerald-500/20 space-y-2"
+              >
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCashMode('add')}
+                    className={`flex-1 py-1 rounded-lg text-[10px] font-extrabold cursor-pointer ${
+                      cashMode === 'add'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    + افزایش موجودی نقدی
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCashMode('set');
+                      setCashInputStr(String(Math.max(0, currentCashBalance)));
+                    }}
+                    className={`flex-1 py-1 rounded-lg text-[10px] font-extrabold cursor-pointer ${
+                      cashMode === 'set'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    تنظیم دقیق کل موجودی نقد
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoFocus
+                    value={
+                      cashInputStr
+                        ? formatMoney(
+                            parseInt(toEnglishDigits(cashInputStr).replace(/\D/g, '') || '0', 10)
+                          )
+                        : ''
+                    }
+                    onChange={(e) =>
+                      setCashInputStr(toEnglishDigits(e.target.value).replace(/\D/g, ''))
+                    }
+                    placeholder={
+                      cashMode === 'add'
+                        ? `مبلغ افزایش (${settings.currencyUnit})...`
+                        : `موجودی نقدی جدید (${settings.currencyUnit})...`
+                    }
+                    className="flex-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-500/40 text-xs font-bold tabular-nums text-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-extrabold cursor-pointer"
+                  >
+                    ثبت
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingCash(false)}
+                    className="p-1.5 rounded-xl bg-slate-200/70 dark:bg-slate-800 text-slate-500 cursor-pointer"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+
           {cards.length === 0 ? (
-            <div className="py-6 text-center text-xs text-slate-400">
-              هنوز کارتی ثبت نشده است.
+            <div className="py-4 text-center text-xs text-slate-400">
+              هنوز کارت بانکی ثبت نشده است.
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {cards.slice(0, 4).map((c) => {
                 const bal = getCardCurrentBalance(c.id, c.initialBalance);
                 const bank = IRANIAN_BANKS[c.bankId] || IRANIAN_BANKS.other;
@@ -344,8 +591,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   totalNetWorth > 0
                     ? Math.max(0, Math.min(100, Math.round((bal / totalNetWorth) * 100)))
                     : 0;
+                const isCardFiltered = cardFilter === c.id;
                 return (
-                  <div key={c.id} className="space-y-1">
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCardFilter(isCardFiltered ? 'all' : c.id)}
+                    className={`w-full text-right space-y-1 p-1.5 -mx-1.5 rounded-xl transition-colors cursor-pointer ${
+                      isCardFiltered
+                        ? 'bg-sky-500/10 ring-1 ring-sky-500/40'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                    }`}
+                  >
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 min-w-0">
                         <BankLogoVector bankId={c.bankId} size={22} mono={isMonochrome} />
@@ -372,20 +629,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         }}
                       />
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           )}
 
           {/* Quick Card Logos Footer */}
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center -space-x-2 space-x-reverse">
               {cards.slice(0, 6).map((c) => (
                 <BankLogoVector
                   key={c.id}
                   bankId={c.bankId}
-                  size={28}
+                  size={26}
                   mono={isMonochrome}
                   className="ring-2 ring-white dark:ring-slate-900"
                 />
@@ -396,7 +653,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               onClick={() => onNavigateTab(1)}
               className="text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer"
             >
-              <span>همه کارت‌ها ({toPersianDigits(cards.length)})</span>
+              <span>همه کارت‌ها و نقدی ({toPersianDigits(cards.length)})</span>
               <ArrowLeft size={13} />
             </button>
           </div>
@@ -1023,17 +1280,246 @@ export const HomeView: React.FC<HomeViewProps> = ({
         )}
       </div>
 
-      {/* Filter & Search Bar for Transactions */}
+      {/* ======================================================================== */}
+      {/* VERTICAL TIMELINE OF CURRENT DAY'S TRANSACTIONS BY HOUR (updatedAt)      */}
+      {/* ======================================================================== */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <CircularIcon name="clock" size="sm" color="#8b5cf6" />
+            <div>
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                تایم‌لاین عمودی تراکنش‌های روز جاری به تفکیک ساعت
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                فیلتر و دسته‌بندی ساعتی بر اساس زمان ثبت و بروزرسانی تراکنش (updatedAt)
+              </p>
+            </div>
+          </div>
+
+          {/* Simple Scope Filter based on updatedAt */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+              {(
+                [
+                  { id: 'today', label: 'امروز (روز جاری)' },
+                  { id: 'last24h', label: '۲۴ ساعت اخیر' },
+                  { id: 'latestDay', label: 'آخرین روز فعال' },
+                ] as const
+              ).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setTimelineScope(item.id)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                    timelineScope === item.id
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Hour Period Filter Bar */}
+        <div
+          data-no-swipe="true"
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+          className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800/80"
+        >
+          <div className="flex items-center gap-1.5 overflow-x-auto max-w-full py-1">
+            <span className="text-[11px] font-bold text-slate-400 shrink-0 ml-1">
+              فیلتر ساعت (updatedAt):
+            </span>
+            {(
+              [
+                { id: 'all', label: 'همه ساعات (۰۰ تا ۲۴)' },
+                { id: 'morning', label: 'صبح (۰۰ تا ۱۲)' },
+                { id: 'afternoon', label: 'ظهر و عصر (۱۲ تا ۱۸)' },
+                { id: 'night', label: 'شب (۱۸ تا ۲۴)' },
+              ] as const
+            ).map((hTab) => (
+              <button
+                key={hTab.id}
+                type="button"
+                onClick={() => setTimelineHourFilter(hTab.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  timelineHourFilter === hTab.id
+                    ? 'theme-bg text-white shadow-2xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                {hTab.label}
+              </button>
+            ))}
+          </div>
+
+          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tabular-nums">
+            {toPersianDigits(timelineTransactions.length)} تراکنش در{' '}
+            {toPersianDigits(timelineHourGroups.length)} بازه ساعتی
+          </span>
+        </div>
+
+        {/* Vertical Timeline Body */}
+        {timelineHourGroups.length === 0 ? (
+          <div className="py-7 px-4 rounded-2xl bg-slate-50/70 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800 text-center space-y-2.5">
+            <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
+              {timelineScope === 'today'
+                ? `در روز جاری (${formatJalaliReadable(todayJalaliStr)}) هنوز تراکنشی ثبت یا بروزرسانی نشده است.`
+                : 'در این بازه ساعتی تراکنشی یافت نشد.'}
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {timelineScope === 'today' && transactions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTimelineScope('latestDay')}
+                  className="px-3 py-1.5 rounded-xl bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer"
+                >
+                  مشاهده تایم‌لاین آخرین روز فعال ({formatJalaliReadable(latestTxJalaliDate)})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onAddTransaction}
+                className="px-3.5 py-1.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer inline-flex items-center gap-1"
+              >
+                <Plus size={13} strokeWidth={2.5} />
+                <span>ثبت تراکنش امروز</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="relative pr-4 sm:pr-6 mr-2 border-r-2 border-emerald-500/40 dark:border-emerald-500/30 space-y-5 py-1">
+            {timelineHourGroups.map((group) => {
+              const hourStr = toPersianDigits(String(group.hour).padStart(2, '0'));
+              const nextHourStr = toPersianDigits(String((group.hour + 1) % 24).padStart(2, '0'));
+              const hourTotalExpense = group.items
+                .filter((i) => i.tx.type === 'expense')
+                .reduce((s, i) => s + i.tx.amount, 0);
+              const hourTotalIncome = group.items
+                .filter((i) => i.tx.type === 'income')
+                .reduce((s, i) => s + i.tx.amount, 0);
+
+              return (
+                <div key={group.hour} className="relative space-y-2.5">
+                  {/* Timeline Node Dot on the Right Rail (RTL) */}
+                  <div className="absolute -right-[23px] sm:-right-[31px] top-1 w-3.5 h-3.5 rounded-full theme-bg ring-4 ring-white dark:ring-slate-900 shadow-xs" />
+
+                  {/* Hour Header Badge */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-extrabold tabular-nums">
+                      <Clock size={12} className="text-emerald-500" />
+                      <span>
+                        ساعت {hourStr}:۰۰ تا {nextHourStr}:۰۰
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-semibold">
+                        ({toPersianDigits(group.items.length)} مورد)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[11px] font-extrabold tabular-nums">
+                      {hourTotalIncome > 0 && (
+                        <span className="text-emerald-600 dark:text-emerald-400">
+                          +{formatMoney(hourTotalIncome)}
+                        </span>
+                      )}
+                      {hourTotalExpense > 0 && (
+                        <span className="text-rose-600 dark:text-rose-400">
+                          -{formatMoney(hourTotalExpense)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Transactions inside this Hour Bucket */}
+                  <div className="space-y-2">
+                    {group.items.map(({ tx, timeLabel }) => {
+                      const cat = categories.find((c) => c.id === tx.categoryId);
+                      const sub = cat?.subCategories.find((s) => s.id === tx.subCategoryId);
+                      const isCash = tx.cardId === 'cash';
+                      const card = cards.find((c) => c.id === tx.cardId);
+
+                      return (
+                        <div
+                          key={tx.id}
+                          onClick={() => onEditTransaction(tx)}
+                          className="p-3 rounded-2xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-800 hover:border-emerald-500/40 transition-all flex items-center justify-between gap-3 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <CircularIcon
+                              name={cat?.icon || 'layers'}
+                              color={cat?.color || '#10b981'}
+                              size="sm"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                                  {tx.title}
+                                </span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold tabular-nums shrink-0">
+                                  {toPersianDigits(timeLabel)}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                <span>{cat?.name || 'سایر'}</span>
+                                {sub && (
+                                  <>
+                                    <span>·</span>
+                                    <span>{sub.name}</span>
+                                  </>
+                                )}
+                                <span>·</span>
+                                <span className="font-bold text-slate-700 dark:text-slate-300">
+                                  {isCash ? 'موجودی نقدی' : card?.title || 'کارت بانکی'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-left shrink-0 tabular-nums">
+                            <div
+                              className={`text-xs sm:text-sm font-black ${
+                                tx.type === 'expense'
+                                  ? 'text-rose-600 dark:text-rose-400'
+                                  : 'text-emerald-600 dark:text-emerald-400'
+                              }`}
+                            >
+                              {tx.type === 'expense' ? '-' : '+'}
+                              {formatMoney(tx.amount)}
+                            </div>
+                            <span className="text-[10px] text-slate-400">
+                              {settings.currencyUnit}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ======================================================================== */}
+      {/* TRANSACTIONS BY CARDS & CASH BALANCE + SEARCH                            */}
+      {/* ======================================================================== */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <CircularIcon name="layers" size="sm" color="#10b981" />
             <div>
               <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                تراکنش‌های اخیر ({toPersianDigits(filteredTransactions.length)} مورد)
+                مشاهده تراکنش‌ها به تفکیک کارت‌ها و موجودی نقدی ({toPersianDigits(filteredTransactions.length)} مورد)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                فیلتر بر اساس نوع تراکنش، کارت بانکی و جستجوی سریع
+                فیلتر بر اساس هر کارت بانکی، کیف پول نقدی، نوع تراکنش و جستجوی سریع
               </p>
             </div>
           </div>
@@ -1053,71 +1539,151 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         </div>
 
-        {/* Interactive Filter Controls: Type + Bank Card (Isolated from Page Swipe!) */}
+        {/* Interactive Filter Controls: Type + Bank Card & Cash Balance (Isolated from Page Swipe!) */}
         <div
           data-no-swipe="true"
           onTouchStart={(e) => e.stopPropagation()}
           onTouchMove={(e) => e.stopPropagation()}
           onTouchEnd={(e) => e.stopPropagation()}
-          className="flex flex-wrap items-center justify-between gap-2 pt-1"
+          className="space-y-2.5 pt-1"
         >
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
-            {(
-              [
-                { id: 'all', label: 'همه تراکنش‌ها' },
-                { id: 'expense', label: 'هزینه‌ها (خرج)' },
-                { id: 'income', label: 'درآمدها (ورودی)' },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setTypeFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
-                  typeFilter === tab.id
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Bank Card Filter */}
-          {cards.length > 1 && (
-            <div
-              data-no-swipe="true"
-              className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-x-auto max-w-full touch-pan-x"
+          {/* Row 1: Payment Source Selector (All + Cash Wallet + Individual Bank Cards) */}
+          <div
+            data-no-swipe="true"
+            className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 overflow-x-auto max-w-full touch-pan-x"
+          >
+            <button
+              type="button"
+              onClick={() => setCardFilter('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                cardFilter === 'all'
+                  ? 'theme-bg text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
             >
-              <button
-                type="button"
-                onClick={() => setCardFilter('all')}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  cardFilter === 'all'
-                    ? 'theme-bg text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                همه کارت‌ها
-              </button>
-              {cards.map((c) => (
+              همه کارت‌ها و نقدی ({toPersianDigits(transactions.length)})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCardFilter('cash')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                cardFilter === 'cash'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white/70 dark:bg-slate-900/60 text-emerald-700 dark:text-emerald-400 hover:bg-white'
+              }`}
+            >
+              <Banknote size={13} />
+              <span>
+                موجودی نقدی ({toPersianDigits(transactions.filter((t) => t.cardId === 'cash').length)})
+              </span>
+            </button>
+
+            {cards.map((c) => {
+              const count = transactions.filter((t) => t.cardId === c.id).length;
+              return (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => setCardFilter(c.id)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
                     cardFilter === c.id
                       ? 'theme-bg text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
                 >
-                  {c.title}
+                  <BankLogoVector bankId={c.bankId} size={16} mono={isMonochrome} />
+                  <span>
+                    {c.title} ({toPersianDigits(count)})
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Row 2: Transaction Type Filter */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+              {(
+                [
+                  { id: 'all', label: 'همه تراکنش‌ها' },
+                  { id: 'expense', label: 'هزینه‌ها (خرج)' },
+                  { id: 'income', label: 'درآمدها (ورودی)' },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setTypeFilter(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                    typeFilter === tab.id
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  {tab.label}
                 </button>
               ))}
             </div>
-          )}
+
+            {cardFilter !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setCardFilter('all')}
+                className="text-xs font-bold text-rose-500 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <X size={13} />
+                <span>نمایش همه حساب‌ها</span>
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Dedicated Summary Banner when filtering by a specific Bank Card or Cash Balance */}
+        {cardFilter !== 'all' && (() => {
+          const isCashSelected = cardFilter === 'cash';
+          const selectedCardObj = cards.find((c) => c.id === cardFilter);
+          const sourceTitle = isCashSelected
+            ? 'موجودی نقدی (کیف پول نقد)'
+            : selectedCardObj?.title || 'کارت بانکی';
+          const initBal = isCashSelected
+            ? initialCashBalance
+            : selectedCardObj?.initialBalance || 0;
+          const incSum = transactions
+            .filter((t) => t.cardId === cardFilter && t.type === 'income')
+            .reduce((s, t) => s + t.amount, 0);
+          const expSum = transactions
+            .filter((t) => t.cardId === cardFilter && t.type === 'expense')
+            .reduce((s, t) => s + t.amount, 0);
+          const liveBal = initBal + incSum - expSum;
+
+          return (
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs tabular-nums">
+              <div>
+                <span className="text-[10px] text-slate-400 block">حساب انتخاب‌شده</span>
+                <span className="font-extrabold text-slate-900 dark:text-white">{sourceTitle}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block">مجموع ورودی (واریز)</span>
+                <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+                  +{formatMoney(incSum)} {settings.currencyUnit}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block">مجموع خروجی (هزینه)</span>
+                <span className="font-extrabold text-rose-600 dark:text-rose-400">
+                  -{formatMoney(expSum)} {settings.currencyUnit}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block">مانده فعلی این حساب</span>
+                <span className="font-black text-slate-900 dark:text-white">
+                  {formatMoney(liveBal)} {settings.currencyUnit}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Transaction List */}
         {filteredTransactions.length === 0 ? (
@@ -1126,7 +1692,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <CircularIcon name="archive" size="lg" color="#94a3b8" />
             </div>
             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-              هنوز تراکنشی ثبت نشده است
+              {cardFilter === 'cash'
+                ? 'هنوز تراکنش نقدی ثبت نشده است'
+                : cardFilter !== 'all'
+                ? 'برای این کارت بانکی هنوز تراکنشی ثبت نشده است'
+                : 'هنوز تراکنشی ثبت نشده است'}
             </p>
             <button
               type="button"
@@ -1134,7 +1704,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               className="px-4 py-2 rounded-xl theme-bg text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
             >
               <Plus size={14} strokeWidth={2.5} />
-              <span>ثبت اولین تراکنش</span>
+              <span>ثبت تراکنش جدید</span>
             </button>
           </div>
         ) : (
@@ -1142,6 +1712,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             {filteredTransactions.map((tx) => {
               const cat = categories.find((c) => c.id === tx.categoryId);
               const sub = cat?.subCategories.find((s) => s.id === tx.subCategoryId);
+              const isCash = tx.cardId === 'cash';
               const card = cards.find((c) => c.id === tx.cardId);
               const bank = card ? IRANIAN_BANKS[card.bankId] : null;
               const txTags = tags.filter((t) => tx.tags.includes(t.id));
@@ -1175,13 +1746,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             <span>{sub.name}</span>
                           </>
                         )}
-                        {card && (
+                        {isCash ? (
                           <>
                             <span aria-hidden="true">·</span>
-                            <span>
-                              {card.title} {bank ? `(${bank.name})` : ''}
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                              موجودی نقدی (کیف پول نقد)
                             </span>
                           </>
+                        ) : (
+                          card && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span>
+                                {card.title} {bank ? `(${bank.name})` : ''}
+                              </span>
+                            </>
+                          )
                         )}
                       </div>
 

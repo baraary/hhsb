@@ -69,6 +69,8 @@ export interface UserAccount {
   createdAt: number;
   isAdmin?: boolean;
   pinCode?: string;
+  pinHash?: string;
+  biometricCredentialId?: string;
 }
 
 export interface SubCategory {
@@ -147,12 +149,13 @@ export interface Transaction {
   tags: string[]; // array of tag IDs
   spentBy: string;
   recordedBy: string;
-  cardId: string;
+  cardId: string; // bank card id or 'cash' for Cash Balance
   jalaliDate: string; // YYYY/MM/DD e.g., 1403/08/14
   time: string; // HH:mm e.g., 19:45
   note?: string;
   smsHash?: string; // Prevents duplicate bank SMS imports
   createdAt: number;
+  updatedAt?: number;
 }
 
 export interface BudgetGoal {
@@ -200,10 +203,22 @@ export interface AppSettings {
   darkMode: boolean;
   themeMode?: ThemeMode;
   colorTheme: ColorThemeId;
-  pinCode: string; // Per-user PIN lock
+  pinCode: string; // Per-user PIN lock (4 to 8 digits/chars)
+  pinHash?: string; // Salted SHA-256 hash of PIN
+  biometricCredentialId?: string; // WebAuthn Passkey ID for Fingerprint / FaceID
+  enableAesEncryption?: boolean; // AES-256-GCM encrypted vault active
   monthlyTotalBudget: number; // Personal monthly total budget
+  initialCashBalance?: number; // Base cash wallet balance (موجودی نقدی اولیه)
   autoCheckClipboardSms?: boolean;
   githubSync?: GitHubSyncConfig;
+}
+
+export interface EncryptedVaultPayload {
+  alg: 'AES-256-GCM-PBKDF2';
+  iv: string;
+  salt: string;
+  ciphertext: string;
+  encryptedAt: number;
 }
 
 export interface AppState {
@@ -218,6 +233,7 @@ export interface AppState {
   reminders?: DueReminder[];
   dismissedReminderIds?: string[];
   importedSmsHashes?: string[];
+  encryptedVault?: EncryptedVaultPayload;
   settings: AppSettings;
   updatedAt?: number;
 }

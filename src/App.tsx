@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, ChevronDown, Check, Plus, ShieldCheck, Lock, X, Trash2 } from 'lucide-react';
+import {
+  User,
+  ChevronDown,
+  Check,
+  Plus,
+  ShieldCheck,
+  Lock,
+  X,
+  Trash2,
+  Fingerprint,
+} from 'lucide-react';
 import {
   AppState,
   Transaction,
@@ -43,6 +53,14 @@ import {
   fetchUsersRegistryFromGitHub,
   deleteUserFileFromGitHub,
 } from './utils/githubSync';
+import {
+  decryptUserVault,
+  isBiometricWebAuthnSupported,
+  getBiometricCredentialForUser,
+  registerBiometricForUser,
+  authenticateBiometricForUser,
+  removeBiometricCredentialForUser,
+} from './utils/securityCrypto';
 
 const USERS_REGISTRY_KEY = 'hamhesab_users_registry_v3';
 const DELETED_USERS_KEY = 'hamhesab_deleted_users_v3';
@@ -298,6 +316,9 @@ export default function App() {
   const [isInitialRemoteCheckDone, setIsInitialRemoteCheckDone] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<boolean>(false);
+  const [pinErrorDetail, setPinErrorDetail] = useState<string>('');
+  const [failedPinAttempts, setFailedPinAttempts] = useState<number>(0);
+  const [pinLockoutUntil, setPinLockoutUntil] = useState<number>(0);
 
   // Mandatory First-Time PIN Setup State (if current account has no PIN on device or GitHub yet)
   const [firstTimePinDraft, setFirstTimePinDraft] = useState<string>('');
@@ -1172,24 +1193,26 @@ export default function App() {
     existingId?: string
   ) => {
     hasUserEditedRef.current = true;
+    const now = Date.now();
     setState((prev) => {
       if (existingId) {
         return {
           ...prev,
-          updatedAt: Date.now(),
+          updatedAt: now,
           transactions: prev.transactions.map((t) =>
-            t.id === existingId ? { ...t, ...txData } : t
+            t.id === existingId ? { ...t, ...txData, updatedAt: now } : t
           ),
         };
       }
       const newTx: Transaction = {
         ...txData,
-        id: `tx_${Date.now()}`,
-        createdAt: Date.now(),
+        id: `tx_${now}`,
+        createdAt: now,
+        updatedAt: now,
       };
       return {
         ...prev,
-        updatedAt: Date.now(),
+        updatedAt: now,
         transactions: [newTx, ...prev.transactions],
       };
     });
@@ -1206,6 +1229,7 @@ export default function App() {
         ...txData,
         id: `tx_${now}_${index}`,
         createdAt: now + index,
+        updatedAt: now + index,
       }));
       const newHashes = txList
         .map((t) => t.smsHash)
@@ -1515,6 +1539,10 @@ export default function App() {
 
   const currentUserName = state.settings.userName || activeUserObj.name || 'کاربر';
   const currentAccountPin = state.settings.pinCode || activeUserObj.pinCode || '';
+  const activeBiometricCredId = getBiometricCredentialForUser(
+    activeUserId,
+    state.settings.biometricCredentialId || activeUserObj.biometricCredentialId
+  );
 
   // Target user for the Pre-Switch Password Verification Modal
   const switchTargetUserObj = switchTargetUserId
@@ -1523,6 +1551,121 @@ export default function App() {
   const effectiveTargetPin = switchTargetUserId
     ? remoteTargetPin || getStoredUserPin(switchTargetUserId)
     : '';
+  const switchTargetBiometricCredId = switchTargetUserObj
+    ? getBiometricCredentialForUser(
+        switchTargetUserObj.id,
+        switchTargetUserObj.biometricCredentialId
+      )
+    : null;
+
+  // Unlock helper that also checks AES-256-GCM encryptedVault if local records are empty
+  const unlockVerifiedAccount = async (targetUser: UserAccount, pinUsed?: string) => {
+    const verifiedState = loadIsolatedUserState(targetUser);
+    const effectivePinToDecrypt =
+      pinUsed || verifiedState.settings.pinCode || targetUser.pinCode || '';
+
+    const localCount =
+      (verifiedState.transactions?.length || 0) +
+      (verifiedState.cards?.length || 0) +
+      (verifiedState.reminders?.length || 0);
+
+    if (localCount === 0 && verifiedState.encryptedVault && effectivePinToDecrypt) {
+      const decrypted = await decryptUserVault(
+        verifiedState.encryptedVault,
+        targetUser.id,
+        effectivePinToDecrypt
+      );
+      if (decrypted) {
+        if (Array.isArray(decrypted.transactions) && decrypted.transactions.length > 0) {
+          verifiedState.transactions = decrypted.transactions;
+        }
+        if (Array.isArray(decrypted.cards) && decrypted.cards.length > 0) {
+          verifiedState.cards = decrypted.cards;
+        }
+        if (Array.isArray(decrypted.reminders) && decrypted.reminders.length > 0) {
+          verifiedState.reminders = decrypted.reminders;
+        }
+        if (typeof decrypted.initialCashBalance === 'number') {
+          verifiedState.settings.initialCashBalance = decrypted.initialCashBalance;
+        }
+      }
+    }
+
+    activeUserIdRef.current = targetUser.id;
+    stateRef.current = verifiedState;
+    setActiveUserId(targetUser.id);
+    setState(verifiedState);
+    setFailedPinAttempts(0);
+    setPinLockoutUntil(0);
+    setPinInput('');
+    setPinError(false);
+    setPinErrorDetail('');
+    setIsUnlocked(true);
+  };
+
+  // Biometric (WebAuthn Fingerprint / FaceID) Login Handler
+  const handleBiometricLogin = async (targetUser: UserAccount, isSwitchModal = false) => {
+    const credId = getBiometricCredentialForUser(
+      targetUser.id,
+      targetUser.id === activeUserId
+        ? state.settings.biometricCredentialId || targetUser.biometricCredentialId
+        : targetUser.biometricCredentialId
+    );
+    const res = await authenticateBiometricForUser(targetUser.id, credId || undefined);
+    if (res.ok) {
+      if (isSwitchModal) {
+        executeVerifiedSwitchUser(targetUser.id);
+      } else {
+        await unlockVerifiedAccount(targetUser);
+      }
+    } else if (res.error) {
+      if (isSwitchModal) {
+        setSwitchPinError(res.error);
+      } else {
+        setPinError(true);
+        setPinErrorDetail(res.error);
+      }
+    }
+  };
+
+  // Register Biometric Passkey (Fingerprint / FaceID) for the currently logged-in user
+  const handleRegisterBiometricForCurrentUser = async () => {
+    const res = await registerBiometricForUser(activeUserId, currentUserName);
+    if (res.ok && res.credentialIdBase64) {
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === activeUserId
+            ? { ...u, biometricCredentialId: res.credentialIdBase64 }
+            : u
+        )
+      );
+      handleUpdateSettings({
+        biometricCredentialId: res.credentialIdBase64,
+        enableAesEncryption: true,
+      });
+      setUserCreatedToast(
+        `ورود بیومتریک (اثر انگشت / تشخیص چهره) + رمزنگاری AES-256 برای حساب «${currentUserName}» فعال شد.`
+      );
+      setTimeout(() => setUserCreatedToast(''), 4500);
+    } else if (res.error) {
+      setUserCreatedToast(res.error);
+      setTimeout(() => setUserCreatedToast(''), 4500);
+    }
+  };
+
+  const handleRemoveBiometricForCurrentUser = () => {
+    removeBiometricCredentialForUser(activeUserId);
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === activeUserId ? { ...u, biometricCredentialId: undefined } : u
+      )
+    );
+    handleUpdateSettings({ biometricCredentialId: undefined });
+    setUserCreatedToast(
+      `ورود بیومتریک برای حساب «${currentUserName}» در این دستگاه غیرفعال شد (رمز ۴ رقمی همچنان فعال است).`
+    );
+    setTimeout(() => setUserCreatedToast(''), 4000);
+  };
 
   // ============================================================================
   // FULL-SCREEN LOGIN & PIN GATE (Blocks 100% of access when opening the link!)
@@ -1592,50 +1735,74 @@ export default function App() {
                 maxLength={4}
                 inputMode="numeric"
                 autoFocus
+                disabled={pinLockoutUntil > Date.now()}
                 value={pinInput}
                 onChange={(e) => {
+                  if (pinLockoutUntil > Date.now()) return;
                   const val = toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4);
                   setPinInput(val);
                   setPinError(false);
+                  setPinErrorDetail('');
                   if (val.length === 4) {
                     if (doesPinMatchUser(activeUserId, val, currentAccountPin)) {
-                      // Ensure state strictly belongs to activeUserId before unlocking
-                      const verifiedState = loadIsolatedUserState(activeUserObj);
-                      activeUserIdRef.current = activeUserObj.id;
-                      stateRef.current = verifiedState;
-                      setState(verifiedState);
-                      setIsUnlocked(true);
+                      // Strictly unlock ONLY the currently selected activeUserObj (with AES-256 vault support)
+                      unlockVerifiedAccount(activeUserObj, val);
                     } else {
-                      // Check if the user entered their own PIN while another user's tab was selected on the login screen
-                      const matchedOtherUser = users.find(
-                        (u) =>
-                          u.id !== activeUserId &&
-                          doesPinMatchUser(u.id, val, getStoredUserPin(u.id))
-                      );
-                      if (matchedOtherUser) {
-                        const matchedState = loadIsolatedUserState(matchedOtherUser);
-                        activeUserIdRef.current = matchedOtherUser.id;
-                        stateRef.current = matchedState;
-                        setActiveUserId(matchedOtherUser.id);
-                        setState(matchedState);
-                        setPinInput('');
-                        setPinError(false);
-                        setIsUnlocked(true);
+                      const nextAttempts = failedPinAttempts + 1;
+                      setFailedPinAttempts(nextAttempts);
+                      setPinError(true);
+                      if (nextAttempts >= 5) {
+                        setPinLockoutUntil(Date.now() + 30000);
+                        setPinErrorDetail(
+                          'به دلیل ۵ بار ورود رمز اشتباه، ورود به مدت ۳۰ ثانیه قفل شد.'
+                        );
                       } else {
-                        setPinError(true);
+                        // Never auto-switch into another user's account! Warn the user if they forgot to select their own tab first.
+                        const matchedOtherUser = users.find(
+                          (u) =>
+                            u.id !== activeUserId &&
+                            doesPinMatchUser(u.id, val, getStoredUserPin(u.id))
+                        );
+                        if (matchedOtherUser) {
+                          setPinErrorDetail(
+                            `توجه: اکنون تبِ حساب «${currentUserName}» انتخاب شده است! اگر قصد ورود به حساب «${matchedOtherUser.name}» را دارید، ابتدا از بالا روی دکمه «${matchedOtherUser.name}» کلیک کنید.`
+                          );
+                        } else {
+                          setPinErrorDetail(
+                            `رمز وارد شده اشتباه است. بدون رمز اختصاصی اجازه ورود به حساب «${currentUserName}» وجود ندارد.`
+                          );
+                        }
                       }
                     }
                   }
                 }}
                 placeholder="••••"
-                className="w-44 mx-auto block px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums text-white"
+                className="w-44 mx-auto block px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums text-white disabled:opacity-40"
               />
 
+              {/* Option 3: Biometric Passkey (Fingerprint / FaceID) Login Button */}
+              {activeBiometricCredId && (
+                <button
+                  type="button"
+                  onClick={() => handleBiometricLogin(activeUserObj, false)}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-extrabold cursor-pointer flex items-center justify-center gap-2 transition-all"
+                >
+                  <Fingerprint size={16} />
+                  <span>ورود سریع به حساب «{currentUserName}» با اثر انگشت / چهره</span>
+                </button>
+              )}
+
               {pinError && (
-                <p className="text-xs text-rose-400 font-bold">
-                  رمز وارد شده اشتباه است. بدون رمز اجازه ورود به حساب «{currentUserName}» وجود ندارد.
+                <p className="text-xs text-rose-400 font-bold leading-relaxed">
+                  {pinErrorDetail ||
+                    `رمز وارد شده اشتباه است. بدون رمز اجازه ورود به حساب «{currentUserName}» وجود ندارد.`}
                 </p>
               )}
+
+              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-semibold">
+                <ShieldCheck size={13} className="text-emerald-400 shrink-0" />
+                <span>محافظت‌شده با رمزنگاری AES-256-GCM و پشتیبانی از ورود بیومتریک</span>
+              </div>
             </div>
           ) : (
             /* Case B: Account does not have a PIN yet — Must set a 4-digit PIN before entering */
@@ -1834,6 +2001,30 @@ export default function App() {
                   );
                 })}
 
+                { isBiometricWebAuthnSupported() && (
+                  activeBiometricCredId ? (
+                    <button
+                      type="button"
+                      onClick={handleRemoveBiometricForCurrentUser}
+                      className="px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
+                      title="اثر انگشت / چهره برای این حساب فعال است (کلیک برای غیرفعال‌سازی)"
+                    >
+                      <Fingerprint size={13} />
+                      <span>بیومتریکِ {currentUserName} فعال است</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleRegisterBiometricForCurrentUser}
+                      className="px-3 py-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/25 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
+                      title="ثبت اثر انگشت یا تشخیص چهره گوشی برای ورود سریع به این حساب"
+                    >
+                      <Fingerprint size={13} />
+                      <span>ثبت اثر انگشت / چهره برای {currentUserName}</span>
+                    </button>
+                  )
+                )}
+
                 <button
                   type="button"
                   onClick={() => {
@@ -1944,6 +2135,9 @@ export default function App() {
                 onToggleReminderPaid={handleToggleReminderPaid}
                 onStepReminderInstallment={handleStepReminderInstallment}
                 onDeleteReminder={handleDeleteReminder}
+                onUpdateCashBalance={(newCash) =>
+                  handleUpdateSettings({ initialCashBalance: newCash })
+                }
               />
             )}
 
@@ -1952,6 +2146,13 @@ export default function App() {
                 state={state}
                 onSaveCard={handleSaveCard}
                 onDeleteCard={handleDeleteCard}
+                onUpdateCashBalance={(newCash) =>
+                  handleUpdateSettings({ initialCashBalance: newCash })
+                }
+                onEditTransaction={(tx) => {
+                  setEditingTx(tx);
+                  setIsTxModalOpen(true);
+                }}
               />
             )}
 
@@ -2100,6 +2301,17 @@ export default function App() {
                 placeholder="••••"
                 className="w-40 mx-auto block px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums text-slate-900 dark:text-white"
               />
+
+              {switchTargetBiometricCredId && !isCheckingRemotePin && (
+                <button
+                  type="button"
+                  onClick={() => handleBiometricLogin(switchTargetUserObj, true)}
+                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-700 dark:text-emerald-300 text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Fingerprint size={15} />
+                  <span>ورود با اثر انگشت / تشخیص چهره «{switchTargetUserObj.name}»</span>
+                </button>
+              )}
 
               {switchPinError && (
                 <p className="text-xs text-rose-500 font-bold">{switchPinError}</p>
