@@ -135,13 +135,13 @@ export function consumePartnerMagicLinkFromHash(): Partial<GitHubSyncConfig> | n
 }
 
 /**
- * Fetches the current file SHA from GitHub, bypassing any browser/edge cache
+ * Fetches the current file SHA and existing state from GitHub, bypassing any browser/edge cache
  */
 async function fetchCurrentFileSha(
   apiUrl: string,
   branch: string,
   headers: Record<string, string>
-): Promise<{ sha?: string; authError?: string }> {
+): Promise<{ sha?: string; existingState?: AppState; authError?: string }> {
   const getRes = await fetch(`${apiUrl}?ref=${encodeURIComponent(branch)}`, {
     headers: {
       ...headers,
@@ -151,7 +151,15 @@ async function fetchCurrentFileSha(
   });
   if (getRes.ok) {
     const fileData = await getRes.json();
-    return { sha: fileData.sha };
+    let existingState: AppState | undefined;
+    if (fileData?.content) {
+      try {
+        existingState = JSON.parse(base64ToUtf8(fileData.content));
+      } catch {
+        // ignore parse error
+      }
+    }
+    return { sha: fileData.sha, existingState };
   }
   if (getRes.status === 401 || getRes.status === 403) {
     return {
@@ -162,7 +170,8 @@ async function fetchCurrentFileSha(
 }
 
 /**
- * Internal implementation of pushing AppState to GitHub with automatic 409 Conflict retry
+ * Internal implementation of pushing AppState to GitHub with automatic 409 Conflict retry,
+ * strict user isolation guard, and anti-wipe protection.
  */
 async function executePushToGitHub(
   state: AppState
@@ -172,11 +181,20 @@ async function executePushToGitHub(
   const owner = syncCfg?.repoOwner?.trim() || autoRepo.repoOwner;
   const repo = syncCfg?.repoName?.trim() || autoRepo.repoName;
   const branch = syncCfg?.branch?.trim() || 'main';
-  const filePath = (syncCfg?.filePath?.trim() || 'data/hamhesab-db.json').replace(/^\/+/, '');
+  const filePath = (syncCfg?.filePath?.trim() || `data/users/${state.userId || 'hootan'}-db.json`).replace(/^\/+/, '');
   const token = syncCfg?.token?.trim() || '';
 
   if (!owner || !repo || !token) {
     return { ok: false, error: 'missing_credentials' };
+  }
+
+  // Strict path guard: ensure filePath matches state.userId when pushing to data/users/
+  if (
+    state.userId &&
+    filePath.startsWith('data/users/') &&
+    filePath !== `data/users/${state.userId}-db.json`
+  ) {
+    return { ok: false, error: 'user_path_mismatch' };
   }
 
   const repoKey = `${owner}/${repo}/${branch}/${filePath}`;
@@ -192,39 +210,74 @@ async function executePushToGitHub(
     'X-GitHub-Api-Version': '2022-11-28',
   };
 
-  // Prepare sanitized state with encrypted syncVault so Fatemeh's phone automatically gets sync access
-  const stateToSave = {
-    ...state,
-    updatedAt: state.updatedAt || Date.now(),
-    syncVault: encodeSyncToken(token),
-    settings: {
-      ...state.settings,
-      githubSync: {
-        ...state.settings.githubSync,
-        enabled: true,
-        repoOwner: owner,
-        repoName: repo,
-        branch,
-        filePath,
-        token: '', // Never store raw ghp_ token in JSON
-        lastSyncedAt: Date.now(),
-      },
-    },
-  };
-
-  const contentBase64 = utf8ToBase64(JSON.stringify(stateToSave, null, 2));
-
   // Up to 3 attempts in case of 409 SHA mismatch
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      let shaToUse = latestKnownSha;
-      if (!shaToUse || attempt > 0) {
-        const fetched = await fetchCurrentFileSha(apiUrl, branch, headers);
-        if (fetched.authError) {
-          return { ok: false, error: fetched.authError };
-        }
-        shaToUse = fetched.sha;
+      const fetched = await fetchCurrentFileSha(apiUrl, branch, headers);
+      if (fetched.authError) {
+        return { ok: false, error: fetched.authError };
       }
+      const shaToUse = fetched.sha;
+      const existingRemote = fetched.existingState;
+
+      // Guard 1: Never allow one user's state to overwrite another user's file!
+      if (
+        existingRemote?.userId &&
+        state.userId &&
+        existingRemote.userId !== state.userId
+      ) {
+        return { ok: false, error: 'user_id_mismatch' };
+      }
+
+      // Guard 2: Anti-Wipe Protection — If remote has transactions/cards/reminders and incoming state is completely empty
+      // (e.g., from a fresh browser that hasn't pulled yet), preserve the existing remote records!
+      let safeStateToSave: AppState = state;
+      if (existingRemote && !(state as any).explicitlyCleared) {
+        const remoteCount =
+          (existingRemote.transactions?.length || 0) +
+          (existingRemote.cards?.length || 0) +
+          (existingRemote.reminders?.length || 0);
+        const localCount =
+          (state.transactions?.length || 0) +
+          (state.cards?.length || 0) +
+          (state.reminders?.length || 0);
+        if (remoteCount > 0 && localCount === 0) {
+          safeStateToSave = {
+            ...state,
+            transactions: existingRemote.transactions || [],
+            cards: existingRemote.cards || [],
+            reminders: existingRemote.reminders || [],
+            categories:
+              (existingRemote.categories?.length || 0) >= (state.categories?.length || 0)
+                ? existingRemote.categories
+                : state.categories,
+            tags: existingRemote.tags || state.tags,
+            budgets: existingRemote.budgets || state.budgets,
+            importedSmsHashes: existingRemote.importedSmsHashes || [],
+          };
+        }
+      }
+
+      const stateToSave = {
+        ...safeStateToSave,
+        updatedAt: safeStateToSave.updatedAt || Date.now(),
+        syncVault: encodeSyncToken(token),
+        settings: {
+          ...safeStateToSave.settings,
+          githubSync: {
+            ...safeStateToSave.settings.githubSync,
+            enabled: true,
+            repoOwner: owner,
+            repoName: repo,
+            branch,
+            filePath,
+            token: '', // Never store raw ghp_ token in JSON
+            lastSyncedAt: Date.now(),
+          },
+        },
+      };
+
+      const contentBase64 = utf8ToBase64(JSON.stringify(stateToSave, null, 2));
 
       const putRes = await fetch(apiUrl, {
         method: 'PUT',
@@ -268,7 +321,6 @@ async function executePushToGitHub(
     }
   }
 
-  // Even if 409 happened because a parallel push from the same session already succeeded 100ms ago, treat as synced!
   return { ok: true };
 }
 
@@ -292,8 +344,8 @@ export async function pullStateFromGitHubDirect(
 ): Promise<{ ok: boolean; remoteState?: AppState; recoveredToken?: string }> {
   const autoRepo = detectGitHubPagesRepo();
   const syncCfg = currentState.settings.githubSync;
-  const owner = syncCfg?.repoOwner?.trim() || autoRepo.repoOwner;
-  const repo = syncCfg?.repoName?.trim() || autoRepo.repoName;
+  const owner = syncCfg?.repoOwner?.trim() || autoRepo.repoOwner || 'baraary';
+  const repo = syncCfg?.repoName?.trim() || autoRepo.repoName || 'hhsb';
   const branch = syncCfg?.branch?.trim() || 'main';
   const filePath = (syncCfg?.filePath?.trim() || 'data/hamhesab-db.json').replace(/^\/+/, '');
   const token = syncCfg?.token?.trim() || '';
@@ -303,36 +355,37 @@ export async function pullStateFromGitHubDirect(
   }
 
   try {
-    // Method A: GitHub Contents API (instant, bypasses CDN cache with If-None-Match)
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(
-      branch
-    )}`;
-    const headers: Record<string, string> = {
-      Accept: 'application/vnd.github+json',
-      'If-None-Match': `"${Date.now()}-${Math.random()}"`,
-    };
+    // If we have an authenticated token, use GitHub Contents API first (instant, 5000 req/hr limit).
+    // If unauthenticated (no token yet), try raw.githubusercontent.com first so we never hit the 60 req/hr API rate limit!
     if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(
+        branch
+      )}`;
+      const headers: Record<string, string> = {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'If-None-Match': `"${Date.now()}-${Math.random()}"`,
+      };
 
-    const res = await fetch(apiUrl, { headers, cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.sha) {
-        latestKnownRepoKey = `${owner}/${repo}/${branch}/${filePath}`;
-        latestKnownSha = data.sha;
-      }
-      if (data && data.content) {
-        const jsonStr = base64ToUtf8(data.content);
-        const parsed = JSON.parse(jsonStr);
-        if (parsed && Array.isArray(parsed.transactions)) {
-          const recoveredToken = parsed.syncVault ? decodeSyncToken(parsed.syncVault) : '';
-          return { ok: true, remoteState: parsed, recoveredToken };
+      const res = await fetch(apiUrl, { headers, cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.sha) {
+          latestKnownRepoKey = `${owner}/${repo}/${branch}/${filePath}`;
+          latestKnownSha = data.sha;
+        }
+        if (data && data.content) {
+          const jsonStr = base64ToUtf8(data.content);
+          const parsed = JSON.parse(jsonStr);
+          if (parsed && Array.isArray(parsed.transactions)) {
+            const recoveredToken = parsed.syncVault ? decodeSyncToken(parsed.syncVault) : '';
+            return { ok: true, remoteState: parsed, recoveredToken };
+          }
         }
       }
     }
 
-    // Method B: Fallback to raw.githubusercontent.com (for public repos if API rate-limited)
+    // Fetch via raw.githubusercontent.com (no 60 req/hr rate limit!)
     const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}?t=${Date.now()}`;
     const rawRes = await fetch(rawUrl, { cache: 'no-store' });
     if (rawRes.ok) {
@@ -340,6 +393,30 @@ export async function pullStateFromGitHubDirect(
       if (parsed && Array.isArray(parsed.transactions)) {
         const recoveredToken = parsed.syncVault ? decodeSyncToken(parsed.syncVault) : '';
         return { ok: true, remoteState: parsed, recoveredToken };
+      }
+    }
+
+    // Final fallback to unauthenticated Contents API if raw failed
+    if (!token) {
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(
+        branch
+      )}`;
+      const res = await fetch(apiUrl, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'If-None-Match': `"${Date.now()}-${Math.random()}"`,
+        },
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.content) {
+          const parsed = JSON.parse(base64ToUtf8(data.content));
+          if (parsed && Array.isArray(parsed.transactions)) {
+            const recoveredToken = parsed.syncVault ? decodeSyncToken(parsed.syncVault) : '';
+            return { ok: true, remoteState: parsed, recoveredToken };
+          }
+        }
       }
     }
   } catch {
@@ -451,16 +528,19 @@ export async function fetchUsersRegistryFromGitHub(
   try {
     // 1. Check Hootan's master admin file for authoritative `usersRegistry` and `deletedUserIds`
     let hootanParsed: any = null;
-    const hootanUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/users/hootan-db.json?ref=${encodeURIComponent(
-      branch
-    )}`;
-    const hRes = await fetch(hootanUrl, { headers, cache: 'no-store' });
-    if (hRes.ok) {
-      const hData = await hRes.json();
-      if (hData?.content) {
-        hootanParsed = JSON.parse(base64ToUtf8(hData.content));
+    if (token?.trim()) {
+      const hootanUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/users/hootan-db.json?ref=${encodeURIComponent(
+        branch
+      )}`;
+      const hRes = await fetch(hootanUrl, { headers, cache: 'no-store' });
+      if (hRes.ok) {
+        const hData = await hRes.json();
+        if (hData?.content) {
+          hootanParsed = JSON.parse(base64ToUtf8(hData.content));
+        }
       }
-    } else {
+    }
+    if (!hootanParsed) {
       const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/data/users/hootan-db.json?t=${Date.now()}`;
       const rawRes = await fetch(rawUrl, { cache: 'no-store' });
       if (rawRes.ok) {

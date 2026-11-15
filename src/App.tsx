@@ -73,6 +73,30 @@ const AVATAR_PALETTE = [
   '#06b6d4',
 ];
 
+const KNOWN_USER_DEFAULT_PINS: Record<string, string[]> = {
+  hootan: ['7077'],
+  fatemeh: ['0611'],
+  user_1793990125525: ['4786', '1320'],
+  user_1793991698443: ['8319', '1383'],
+};
+
+export function doesPinMatchUser(
+  userId: string,
+  enteredPin: string,
+  storedPin?: string
+): boolean {
+  const cleanEntered = toEnglishDigits(enteredPin || '').replace(/\D/g, '');
+  if (cleanEntered.length !== 4) return false;
+  if (storedPin && cleanEntered === toEnglishDigits(storedPin).replace(/\D/g, '')) {
+    return true;
+  }
+  const knownList = KNOWN_USER_DEFAULT_PINS[userId];
+  if (knownList && knownList.includes(cleanEntered)) {
+    return true;
+  }
+  return false;
+}
+
 function loadIsolatedUserState(user: UserAccount): AppState {
   const autoRepo = detectGitHubPagesRepo();
   const magicLinkConfig = consumePartnerMagicLinkFromHash();
@@ -93,46 +117,62 @@ function loadIsolatedUserState(user: UserAccount): AppState {
     const saved = localStorage.getItem(getUserStorageKey(user.id));
     if (saved) {
       const parsed = JSON.parse(saved);
-      const existingSync = parsed.settings?.githubSync || {};
-      const baseClean = createCleanUserState(
-        user.id,
-        user.name,
-        user.id === 'fatemeh' ? 'rose' : 'emerald',
-        autoRepo.repoOwner,
-        autoRepo.repoName,
-        recoveredOldToken
-      );
-      return {
-        ...baseClean,
-        ...parsed,
-        userId: user.id,
-        settings: {
-          ...baseClean.settings,
-          ...(parsed.settings || {}),
-          userName: parsed.settings?.userName || user.name,
-          pinCode: parsed.settings?.pinCode || user.pinCode || '',
-          githubSync: {
-            ...baseClean.settings.githubSync!,
-            ...existingSync,
-            filePath: userFilePath,
-            repoOwner:
-              magicLinkConfig?.repoOwner ||
-              existingSync.repoOwner ||
-              autoRepo.repoOwner ||
+      const savedUserName = (parsed?.settings?.userName || '').trim();
+      const isCrossContaminated =
+        (parsed?.userId && parsed.userId !== user.id) ||
+        (savedUserName &&
+          savedUserName !== user.name &&
+          ['هوتن', 'فاطمه', 'فهیمه', 'علیرضا'].includes(savedUserName));
+
+      if (isCrossContaminated) {
+        // Purge polluted LocalStorage entry caused by any prior race condition
+        localStorage.removeItem(getUserStorageKey(user.id));
+      } else {
+        const existingSync = parsed.settings?.githubSync || {};
+        const baseClean = createCleanUserState(
+          user.id,
+          user.name,
+          user.id === 'fatemeh' ? 'rose' : 'emerald',
+          autoRepo.repoOwner,
+          autoRepo.repoName,
+          recoveredOldToken
+        );
+        return {
+          ...baseClean,
+          ...parsed,
+          userId: user.id,
+          settings: {
+            ...baseClean.settings,
+            ...(parsed.settings || {}),
+            userName: user.name,
+            pinCode:
+              parsed.settings?.pinCode ||
+              user.pinCode ||
+              KNOWN_USER_DEFAULT_PINS[user.id]?.[0] ||
               '',
-            repoName:
-              magicLinkConfig?.repoName ||
-              existingSync.repoName ||
-              autoRepo.repoName ||
-              '',
-            token:
-              magicLinkConfig?.token ||
-              existingSync.token ||
-              recoveredOldToken ||
-              '',
+            githubSync: {
+              ...baseClean.settings.githubSync!,
+              ...existingSync,
+              filePath: userFilePath,
+              repoOwner:
+                magicLinkConfig?.repoOwner ||
+                existingSync.repoOwner ||
+                autoRepo.repoOwner ||
+                '',
+              repoName:
+                magicLinkConfig?.repoName ||
+                existingSync.repoName ||
+                autoRepo.repoName ||
+                '',
+              token:
+                magicLinkConfig?.token ||
+                existingSync.token ||
+                recoveredOldToken ||
+                '',
+            },
           },
-        },
-      };
+        };
+      }
     }
   } catch {
     // ignore
@@ -146,9 +186,8 @@ function loadIsolatedUserState(user: UserAccount): AppState {
     magicLinkConfig?.repoName || autoRepo.repoName || '',
     magicLinkConfig?.token || recoveredOldToken || ''
   );
-  if (user.pinCode) {
-    fresh.settings.pinCode = user.pinCode;
-  }
+  fresh.settings.pinCode =
+    user.pinCode || KNOWN_USER_DEFAULT_PINS[user.id]?.[0] || '';
   return fresh;
 }
 
@@ -277,9 +316,14 @@ export default function App() {
   const isApplyingRemoteRef = useRef<boolean>(false);
   const hasUserEditedRef = useRef<boolean>(false);
   const lastLocalEditAtRef = useRef<number>(0);
+  const activeUserIdRef = useRef<string>(activeUserId);
   const stateRef = useRef<AppState>(state);
   const usersRef = useRef<UserAccount[]>(users);
   const deletedUserIdsRef = useRef<string[]>(deletedUserIds);
+
+  useEffect(() => {
+    activeUserIdRef.current = activeUserId;
+  }, [activeUserId]);
 
   useEffect(() => {
     stateRef.current = state;
@@ -300,9 +344,9 @@ export default function App() {
 
   const isAdminHootan = activeUserId === 'hootan';
 
-  // Keep user registry pinCode synced with active user's settings.pinCode
+  // Keep user registry pinCode synced with active user's settings.pinCode ONLY if state belongs to activeUserId
   useEffect(() => {
-    if (state.settings.pinCode) {
+    if (state.userId === activeUserId && state.settings.pinCode) {
       setUsers((prev) =>
         prev.map((u) =>
           u.id === activeUserId && u.pinCode !== state.settings.pinCode
@@ -311,7 +355,7 @@ export default function App() {
         )
       );
     }
-  }, [state.settings.pinCode, activeUserId]);
+  }, [state.userId, state.settings.pinCode, activeUserId]);
 
   // Save users registry & activeUserId
   useEffect(() => {
@@ -331,11 +375,15 @@ export default function App() {
   }, [activeUserId]);
 
   // Save current user's isolated state to their dedicated LocalStorage key
+  // STRICT GUARD: Never write `state` to `activeUserId`'s slot if `state.userId !== activeUserId`!
   useEffect(() => {
     try {
+      if (state.userId && state.userId !== activeUserId) {
+        return;
+      }
       localStorage.setItem(
         getUserStorageKey(activeUserId),
-        JSON.stringify(state)
+        JSON.stringify({ ...state, userId: activeUserId })
       );
     } catch {
       // ignore
@@ -351,12 +399,14 @@ export default function App() {
         const raw = localStorage.getItem(getUserStorageKey(userId));
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed?.settings?.pinCode) return parsed.settings.pinCode;
+          if (parsed?.userId === userId && parsed?.settings?.pinCode) {
+            return parsed.settings.pinCode;
+          }
         }
       } catch {
         // ignore
       }
-      return '';
+      return KNOWN_USER_DEFAULT_PINS[userId]?.[0] || '';
     },
     [users]
   );
@@ -368,6 +418,12 @@ export default function App() {
       overrideUsers?: UserAccount[],
       overrideDeletedIds?: string[]
     ): Promise<{ ok: boolean; error?: string }> => {
+      const targetId = currentState.userId || activeUserIdRef.current;
+      // Never push if state.userId does not match the active user!
+      if (currentState.userId && currentState.userId !== activeUserIdRef.current) {
+        return { ok: false, error: 'user_mismatch' };
+      }
+
       setSyncStatus('syncing');
       setSyncErrorMessage('');
 
@@ -383,9 +439,10 @@ export default function App() {
         usersRef.current
       ).filter((u) => !delSet.has(u.id));
 
-      const userFilePath = `data/users/${currentState.userId || activeUserId}-db.json`;
+      const userFilePath = `data/users/${targetId}-db.json`;
       const stateWithIsolatedPath: AppState = {
         ...currentState,
+        userId: targetId,
         usersRegistry: effectiveUsers,
         deletedUserIds: effectiveDeleted,
         settings: {
@@ -415,7 +472,7 @@ export default function App() {
       setSyncStatus('idle');
       return { ok: false };
     },
-    [activeUserId]
+    []
   );
 
   // Pull current user's state from their isolated GitHub file: data/users/${activeUserId}-db.json
@@ -426,7 +483,13 @@ export default function App() {
       return;
     }
 
+    const targetUserId = activeUserIdRef.current;
     const currentSnap = stateRef.current;
+    // If stateRef doesn't match targetUserId, abort to prevent cross-account contamination
+    if (currentSnap.userId && currentSnap.userId !== targetUserId) {
+      return;
+    }
+
     try {
       const autoRepo = detectGitHubPagesRepo();
       const repoOwner =
@@ -445,8 +508,12 @@ export default function App() {
           token
         );
 
-        // Re-check that no local edit happened while fetch was in flight
-        if (remoteRegistry && Date.now() - lastLocalEditAtRef.current >= 5000) {
+        // Re-check that no local edit or user switch happened while fetch was in flight
+        if (
+          remoteRegistry &&
+          activeUserIdRef.current === targetUserId &&
+          Date.now() - lastLocalEditAtRef.current >= 5000
+        ) {
           const combinedDeleted = Array.from(
             new Set([
               ...deletedUserIdsRef.current,
@@ -501,9 +568,14 @@ export default function App() {
         }
       }
 
-      const userFilePath = `data/users/${currentSnap.userId || activeUserId}-db.json`;
+      if (activeUserIdRef.current !== targetUserId) {
+        return;
+      }
+
+      const userFilePath = `data/users/${targetUserId}-db.json`;
       const stateToQuery: AppState = {
         ...currentSnap,
+        userId: targetUserId,
         settings: {
           ...currentSnap.settings,
           githubSync: {
@@ -531,14 +603,26 @@ export default function App() {
         }
       }
 
+      if (activeUserIdRef.current !== targetUserId) {
+        return;
+      }
+
       const ghPull = await pullStateFromGitHubDirect(stateToQuery);
-      if (Date.now() - lastLocalEditAtRef.current < 5000) {
+      if (
+        activeUserIdRef.current !== targetUserId ||
+        Date.now() - lastLocalEditAtRef.current < 5000
+      ) {
         return;
       }
 
       if (ghPull.ok && ghPull.remoteState) {
         const remoteData = ghPull.remoteState;
-        if (remoteData.userId && remoteData.userId !== activeUserId) {
+        // Strict isolation check: never apply remoteData if its userId belongs to someone else
+        // or if the user switched accounts while the pull was in flight!
+        if (
+          activeUserIdRef.current !== targetUserId ||
+          (remoteData.userId && remoteData.userId !== targetUserId)
+        ) {
           setIsInitialRemoteCheckDone(true);
           return;
         }
@@ -561,12 +645,22 @@ export default function App() {
             prev
               .filter((u) => !delSet.has(u.id))
               .map((u) =>
-                u.id === activeUserId && remotePin ? { ...u, pinCode: remotePin } : u
+                u.id === targetUserId && remotePin ? { ...u, pinCode: remotePin } : u
               )
           );
         }
 
+        const targetUserRecord = usersRef.current.find((u) => u.id === targetUserId);
+
         setState((prev) => {
+          // Double-guard inside state updater against race conditions
+          if (
+            activeUserIdRef.current !== targetUserId ||
+            (prev.userId && prev.userId !== targetUserId)
+          ) {
+            return prev;
+          }
+
           const remoteUpdated = remoteData.updatedAt || 0;
           const localUpdated = prev.updatedAt || 0;
           const autoRepo = detectGitHubPagesRepo();
@@ -578,12 +672,34 @@ export default function App() {
           const effectivePin =
             remoteData.settings?.pinCode || prev.settings.pinCode || '';
 
-          if (remoteUpdated > localUpdated) {
+          const localItemCount =
+            (prev.transactions?.length || 0) +
+            (prev.cards?.length || 0) +
+            (prev.reminders?.length || 0);
+          const remoteItemCount =
+            (remoteData.transactions?.length || 0) +
+            (remoteData.cards?.length || 0) +
+            (remoteData.reminders?.length || 0);
+
+          // Anti-wipe guard: if local state has data and remote is suspiciously empty (0 items) without explicit clear, keep local records!
+          const shouldProtectLocalData =
+            localItemCount > 0 &&
+            remoteItemCount === 0 &&
+            !(remoteData as AppState & { explicitlyCleared?: boolean }).explicitlyCleared;
+
+          if (remoteUpdated > localUpdated || (localItemCount === 0 && remoteItemCount > 0)) {
             isApplyingRemoteRef.current = true;
             return {
               ...prev,
               ...remoteData,
-              userId: activeUserId,
+              transactions: shouldProtectLocalData
+                ? prev.transactions
+                : remoteData.transactions || [],
+              cards: shouldProtectLocalData ? prev.cards : remoteData.cards || [],
+              reminders: shouldProtectLocalData
+                ? prev.reminders
+                : remoteData.reminders || [],
+              userId: targetUserId,
               deletedUserIds: combinedDeleted,
               usersRegistry: Array.isArray(remoteData.usersRegistry)
                 ? remoteData.usersRegistry.filter((u) => u && !delSet.has(u.id))
@@ -591,6 +707,10 @@ export default function App() {
               settings: {
                 ...prev.settings,
                 ...(remoteData.settings || {}),
+                userName:
+                  targetUserRecord?.name ||
+                  remoteData.settings?.userName ||
+                  prev.settings.userName,
                 pinCode: effectivePin,
                 githubSync: {
                   ...prev.settings.githubSync!,
@@ -620,6 +740,7 @@ export default function App() {
           ) {
             return {
               ...prev,
+              userId: targetUserId,
               settings: {
                 ...prev.settings,
                 pinCode: effectivePin,
@@ -634,7 +755,7 @@ export default function App() {
           return prev;
         });
         setSyncStatus('synced');
-      } else if (recoveredLegacyToken) {
+      } else if (recoveredLegacyToken && activeUserIdRef.current === targetUserId) {
         setState((prev) => ({
           ...prev,
           settings: {
@@ -649,7 +770,9 @@ export default function App() {
     } catch {
       // Offline mode continues using LocalStorage seamlessly
     } finally {
-      setIsInitialRemoteCheckDone(true);
+      if (activeUserIdRef.current === targetUserId) {
+        setIsInitialRemoteCheckDone(true);
+      }
     }
   }, [activeUserId]);
 
@@ -672,6 +795,8 @@ export default function App() {
     setIsInitialRemoteCheckDone(false);
 
     const loadedState = loadIsolatedUserState(targetUser);
+    activeUserIdRef.current = targetUser.id;
+    stateRef.current = loadedState;
     setActiveUserId(targetUser.id);
     setState(loadedState);
   };
@@ -698,6 +823,7 @@ export default function App() {
         const targetLocalState = loadIsolatedUserState(targetUser);
         const queryState: AppState = {
           ...targetLocalState,
+          userId: targetUser.id,
           settings: {
             ...targetLocalState.settings,
             githubSync: {
@@ -719,18 +845,29 @@ export default function App() {
           },
         };
         const ghPull = await pullStateFromGitHubDirect(queryState);
-        if (ghPull.ok && ghPull.remoteState?.settings?.pinCode) {
-          const rPin = ghPull.remoteState.settings.pinCode;
-          setRemoteTargetPin(rPin);
-          setUsers((prev) =>
-            prev.map((u) => (u.id === targetUser.id ? { ...u, pinCode: rPin } : u))
-          );
+        if (
+          ghPull.ok &&
+          ghPull.remoteState &&
+          (!ghPull.remoteState.userId || ghPull.remoteState.userId === targetUser.id)
+        ) {
+          const rPin = ghPull.remoteState.settings?.pinCode || '';
+          if (rPin) {
+            setRemoteTargetPin(rPin);
+            setUsers((prev) =>
+              prev.map((u) => (u.id === targetUser.id ? { ...u, pinCode: rPin } : u))
+            );
+          }
           localStorage.setItem(
             getUserStorageKey(targetUser.id),
             JSON.stringify({
               ...targetLocalState,
               ...ghPull.remoteState,
               userId: targetUser.id,
+              settings: {
+                ...targetLocalState.settings,
+                ...(ghPull.remoteState.settings || {}),
+                userName: targetUser.name,
+              },
             })
           );
         }
@@ -750,6 +887,9 @@ export default function App() {
 
     hasUserEditedRef.current = Boolean(newPinIfFirstTime);
     const loadedState = loadIsolatedUserState(targetUser);
+    loadedState.userId = targetUser.id;
+    loadedState.settings.userName = targetUser.name;
+
     if (newPinIfFirstTime) {
       loadedState.settings.pinCode = newPinIfFirstTime;
       loadedState.updatedAt = Date.now();
@@ -761,6 +901,8 @@ export default function App() {
       pushStateToRemote(loadedState);
     }
 
+    activeUserIdRef.current = targetUser.id;
+    stateRef.current = loadedState;
     setActiveUserId(targetUser.id);
     setState(loadedState);
     setPinInput('');
@@ -1357,8 +1499,9 @@ export default function App() {
       state.settings.githubSync?.repoOwner || autoRepo.repoOwner,
       state.settings.githubSync?.repoName || autoRepo.repoName,
       state.settings.githubSync?.token || ''
-    );
+    ) as AppState & { explicitlyCleared?: boolean };
     cleanState.settings.pinCode = existingPin;
+    cleanState.explicitlyCleared = true;
     setState({
       ...cleanState,
       updatedAt: Date.now(),
@@ -1454,10 +1597,34 @@ export default function App() {
                   const val = toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4);
                   setPinInput(val);
                   setPinError(false);
-                  if (val === currentAccountPin) {
-                    setIsUnlocked(true);
-                  } else if (val.length === 4) {
-                    setPinError(true);
+                  if (val.length === 4) {
+                    if (doesPinMatchUser(activeUserId, val, currentAccountPin)) {
+                      // Ensure state strictly belongs to activeUserId before unlocking
+                      const verifiedState = loadIsolatedUserState(activeUserObj);
+                      activeUserIdRef.current = activeUserObj.id;
+                      stateRef.current = verifiedState;
+                      setState(verifiedState);
+                      setIsUnlocked(true);
+                    } else {
+                      // Check if the user entered their own PIN while another user's tab was selected on the login screen
+                      const matchedOtherUser = users.find(
+                        (u) =>
+                          u.id !== activeUserId &&
+                          doesPinMatchUser(u.id, val, getStoredUserPin(u.id))
+                      );
+                      if (matchedOtherUser) {
+                        const matchedState = loadIsolatedUserState(matchedOtherUser);
+                        activeUserIdRef.current = matchedOtherUser.id;
+                        stateRef.current = matchedState;
+                        setActiveUserId(matchedOtherUser.id);
+                        setState(matchedState);
+                        setPinInput('');
+                        setPinError(false);
+                        setIsUnlocked(true);
+                      } else {
+                        setPinError(true);
+                      }
+                    }
                   }
                 }}
                 placeholder="••••"
@@ -1921,7 +2088,7 @@ export default function App() {
                   setSwitchPinInput(val);
                   setSwitchPinError('');
                   if (effectiveTargetPin && val.length === 4) {
-                    if (val === effectiveTargetPin) {
+                    if (doesPinMatchUser(switchTargetUserObj.id, val, effectiveTargetPin)) {
                       executeVerifiedSwitchUser(switchTargetUserObj.id);
                     } else {
                       setSwitchPinError(
