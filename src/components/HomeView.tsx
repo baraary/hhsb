@@ -12,12 +12,19 @@ import {
   ChevronUp,
   Clock,
   Banknote,
+  Eye,
+  EyeOff,
+  Target,
+  Sparkles,
+  ArrowLeftRight,
+  CreditCard,
 } from 'lucide-react';
 import {
   AppState,
   Transaction,
   DueReminder,
   ReminderRecurrence,
+  SavingsGoal,
 } from '../types';
 import {
   formatMoney,
@@ -41,10 +48,14 @@ interface HomeViewProps {
   onNavigateTab: (index: number) => void;
   onAddReminder: (rem: Omit<DueReminder, 'id'>) => void;
   onUpdateReminder: (id: string, rem: Omit<DueReminder, 'id'>) => void;
-  onToggleReminderPaid: (id: string) => void;
-  onStepReminderInstallment: (id: string, delta: 1 | -1) => void;
+  onToggleReminderPaid: (id: string, deductFromCardId?: string) => void;
+  onStepReminderInstallment: (id: string, delta: 1 | -1, deductFromCardId?: string) => void;
   onDeleteReminder: (id: string) => void;
   onUpdateCashBalance: (newInitialCash: number) => void;
+  onTogglePrivacyMode?: () => void;
+  onSaveSavingsGoal?: (goal: Omit<SavingsGoal, 'id' | 'createdAt'>) => void;
+  onUpdateSavingsGoalAmount?: (goalId: string, deltaAmount: number) => void;
+  onDeleteSavingsGoal?: (goalId: string) => void;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
@@ -60,11 +71,25 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onStepReminderInstallment,
   onDeleteReminder,
   onUpdateCashBalance,
+  onTogglePrivacyMode,
+  onSaveSavingsGoal,
+  onUpdateSavingsGoalAmount,
+  onDeleteSavingsGoal,
 }) => {
-  const { transactions, cards, categories, tags, reminders = [], settings } = state;
+  const {
+    transactions,
+    cards,
+    categories,
+    tags,
+    reminders = [],
+    savingsGoals = [],
+    settings,
+  } = state;
   const userName = settings.userName || settings.hootanName || 'کاربر';
+  const isPrivacy = Boolean(settings.privacyMode);
+  const maskMoney = (amount: number) => (isPrivacy ? '•••••••' : formatMoney(amount));
 
-  const [typeFilter, setTypeFilter] = useState<'all' | 'expense' | 'income'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'expense' | 'income' | 'transfer'>('all');
   const [cardFilter, setCardFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -72,6 +97,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [isEditingCash, setIsEditingCash] = useState(false);
   const [cashMode, setCashMode] = useState<'add' | 'set'>('add');
   const [cashInputStr, setCashInputStr] = useState('');
+
+  // Savings Goals (قلک‌ها و اهداف پس‌انداز) state
+  const [isAddingGoal, setIsAddingGoal] = useState(false);
+  const [goalTitle, setGoalTitle] = useState('');
+  const [goalTargetStr, setGoalTargetStr] = useState('');
+  const [goalInitialSavedStr, setGoalInitialSavedStr] = useState('');
+  const [goalDepositInputs, setGoalDepositInputs] = useState<Record<string, string>>({});
+
+  // Installment Auto-Deduct card selector per reminder id
+  const [installmentPaySourceMap, setInstallmentPaySourceMap] = useState<
+    Record<string, string>
+  >({});
 
   // Today's Vertical Timeline filter state (based on updatedAt)
   const [timelineScope, setTimelineScope] = useState<'today' | 'last24h' | 'latestDay'>('today');
@@ -98,24 +135,40 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   const isMonochrome = settings.colorTheme === 'monochrome';
 
-  // Calculate each card's real current balance (initial + card incomes - card expenses)
+  // Calculate each card's real current balance (initial + incomes + transfersIn - expenses - transfersOut)
   const getCardCurrentBalance = (cardId: string, initialBalance: number) => {
     const cInc = transactions
-      .filter((t) => t.cardId === cardId && t.type === 'income')
+      .filter(
+        (t) =>
+          (t.cardId === cardId && t.type === 'income') ||
+          (t.toCardId === cardId && t.type === 'transfer')
+      )
       .reduce((s, t) => s + t.amount, 0);
     const cExp = transactions
-      .filter((t) => t.cardId === cardId && t.type === 'expense')
+      .filter(
+        (t) =>
+          (t.cardId === cardId && t.type === 'expense') ||
+          (t.cardId === cardId && t.type === 'transfer')
+      )
       .reduce((s, t) => s + t.amount, 0);
     return initialBalance + cInc - cExp;
   };
 
-  // Calculate live Cash Balance (موجودی نقدی)
+  // Calculate live Cash Balance (موجودی نقدی) including ATM/card transfers
   const initialCashBalance = settings.initialCashBalance || 0;
   const cashIncomeTotal = transactions
-    .filter((t) => t.cardId === 'cash' && t.type === 'income')
+    .filter(
+      (t) =>
+        (t.cardId === 'cash' && t.type === 'income') ||
+        (t.toCardId === 'cash' && t.type === 'transfer')
+    )
     .reduce((s, t) => s + t.amount, 0);
   const cashExpenseTotal = transactions
-    .filter((t) => t.cardId === 'cash' && t.type === 'expense')
+    .filter(
+      (t) =>
+        (t.cardId === 'cash' && t.type === 'expense') ||
+        (t.cardId === 'cash' && t.type === 'transfer')
+    )
     .reduce((s, t) => s + t.amount, 0);
   const currentCashBalance = initialCashBalance + cashIncomeTotal - cashExpenseTotal;
 
@@ -124,6 +177,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
     0
   );
   const totalNetWorth = cardsTotalBalance + currentCashBalance;
+  const totalSavedInGoals = savingsGoals.reduce((s, g) => s + (g.savedAmount || 0), 0);
+  const spendableNetWorth = Math.max(0, totalNetWorth - totalSavedInGoals);
+  const nextUpcomingReminder = reminders
+    .filter((r) => !r.isPaid)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
 
   const handleSaveCashAdjustment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,7 +226,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const filteredTransactions = [...transactions]
     .filter((tx) => {
       if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
-      if (cardFilter !== 'all' && tx.cardId !== cardFilter) return false;
+      if (
+        cardFilter !== 'all' &&
+        tx.cardId !== cardFilter &&
+        tx.toCardId !== cardFilter
+      )
+        return false;
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         const cat = categories.find((c) => c.id === tx.categoryId);
@@ -320,6 +383,122 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   return (
     <div className="space-y-6 pb-8">
+      {/* Compact 4-Tile Bento Grid at Top of HomeView */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Tile 1: Spendable Balance (After Savings Goals) */}
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+              موجودی قابل خرج (آزاد)
+            </span>
+            <Sparkles size={14} className="text-emerald-500 shrink-0" />
+          </div>
+          <div className="mt-2 tabular-nums">
+            <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white truncate">
+              {maskMoney(spendableNetWorth)}{' '}
+              <span className="text-[10px] font-normal text-slate-400">
+                {settings.currencyUnit}
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 block mt-0.5 truncate">
+              {totalSavedInGoals > 0
+                ? `پس از کسر ${maskMoney(totalSavedInGoals)} قلک‌ها`
+                : 'کل موجودی آزاد کارت‌ها و نقد'}
+            </span>
+          </div>
+        </div>
+
+        {/* Tile 2: Monthly Budget Status */}
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+              وضعیت بودجه ماهانه
+            </span>
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded-md font-extrabold tabular-nums ${
+                budgetPercent > 85
+                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                  : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+              }`}
+            >
+              {toPersianDigits(budgetPercent)}٪ مصرف
+            </span>
+          </div>
+          <div className="mt-2 space-y-1.5">
+            <div className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white tabular-nums truncate">
+              {settings.monthlyTotalBudget > 0
+                ? `مانده: ${maskMoney(
+                    Math.max(0, settings.monthlyTotalBudget - totalExpense)
+                  )}`
+                : `خرج ماه: ${maskMoney(totalExpense)}`}
+            </div>
+            <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div
+                className={`h-full rounded-full ${
+                  budgetPercent > 85 ? 'bg-rose-500' : 'theme-bg'
+                }`}
+                style={{ width: `${Math.min(100, budgetPercent)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Tile 3: Next Upcoming Installment */}
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+              نزدیک‌ترین قسط پیش‌رو
+            </span>
+            <Clock size={14} className="text-amber-500 shrink-0" />
+          </div>
+          {nextUpcomingReminder ? (
+            <div className="mt-2 tabular-nums">
+              <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
+                {nextUpcomingReminder.title}
+              </div>
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold block mt-0.5 truncate">
+                {maskMoney(nextUpcomingReminder.amount)} ·{' '}
+                {formatJalaliReadable(nextUpcomingReminder.dueDate)}
+              </span>
+            </div>
+          ) : (
+            <div className="mt-2">
+              <div className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">
+                بدون قسط معوق
+              </div>
+              <span className="text-[10px] text-slate-400 block mt-0.5">
+                همه تعهدات به‌روز هستند
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Tile 4: Cash Wallet Quick Tile */}
+        <div
+          onClick={() => {
+            setIsEditingCash(true);
+            setCashMode('add');
+          }}
+          className="p-3.5 rounded-2xl bg-emerald-500/8 dark:bg-emerald-500/12 border border-emerald-500/25 flex flex-col justify-between cursor-pointer hover:border-emerald-500/50 transition-all"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-extrabold text-emerald-800 dark:text-emerald-300">
+              کیف پول نقدی (نقد)
+            </span>
+            <Banknote size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+          </div>
+          <div className="mt-2 tabular-nums">
+            <div className="text-sm sm:text-base font-black text-emerald-700 dark:text-emerald-300 truncate">
+              {maskMoney(currentCashBalance)}{' '}
+              <span className="text-[10px] font-normal">{settings.currencyUnit}</span>
+            </div>
+            <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-bold block mt-0.5">
+              + کلیک برای افزایش سریع نقد
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Top Hero Balance & Personal Cards + Cash Summary Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* Main Hero Balance Card (Slim & Compact) */}
@@ -341,6 +520,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
+              {onTogglePrivacyMode && (
+                <button
+                  type="button"
+                  onClick={onTogglePrivacyMode}
+                  className="p-2 rounded-xl bg-white/20 hover:bg-white/30 text-white backdrop-blur-xs active:scale-95 transition-all cursor-pointer"
+                  title={
+                    isPrivacy
+                      ? 'نمایش اعداد و مبالغ'
+                      : 'مخفی‌سازی اعداد در جمع (حالت حریم خصوصی)'
+                  }
+                >
+                  {isPrivacy ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onOpenBankSms}
@@ -365,14 +558,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div>
               <div className="flex items-baseline gap-1.5">
                 <h2 className="text-2xl sm:text-3xl font-black tabular-nums tracking-tight leading-none">
-                  {formatMoney(totalNetWorth)}
+                  {maskMoney(totalNetWorth)}
                 </h2>
                 <span className="text-xs font-medium text-white/85">
                   {settings.currencyUnit}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-white/85 mt-1.5 tabular-nums">
-                <span>جمع کارت‌ها: {formatMoney(cardsTotalBalance)}</span>
+                <span>جمع کارت‌ها: {maskMoney(cardsTotalBalance)}</span>
                 <span>·</span>
                 <button
                   type="button"
@@ -383,7 +576,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   }}
                   className="underline decoration-white/50 hover:decoration-white font-extrabold cursor-pointer"
                 >
-                  موجودی نقدی: {formatMoney(currentCashBalance)} {settings.currencyUnit} (+ افزایش نقد)
+                  موجودی نقدی: {maskMoney(currentCashBalance)} {settings.currencyUnit} (+ افزایش نقد)
                 </button>
               </div>
             </div>
@@ -394,7 +587,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-white/90 mb-1">
                   <span>مصرف بودجه</span>
                   <span className="tabular-nums font-bold">
-                    {toPersianDigits(budgetPercent)}٪ از {formatMoney(settings.monthlyTotalBudget)}
+                    {toPersianDigits(budgetPercent)}٪ از {maskMoney(settings.monthlyTotalBudget)}
                   </span>
                 </div>
                 <div className="w-full h-1.5 rounded-full bg-black/25 overflow-hidden">
@@ -416,7 +609,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <div className="min-w-0">
                 <span className="text-[10px] text-white/75 block leading-tight">کل ورودی / درآمد</span>
                 <span className="text-xs sm:text-sm font-extrabold tabular-nums text-emerald-100">
-                  +{formatMoney(totalIncome)}
+                  +{maskMoney(totalIncome)}
                 </span>
               </div>
             </div>
@@ -426,7 +619,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <div className="min-w-0">
                 <span className="text-[10px] text-white/75 block leading-tight">کل هزینه‌ها / خرج</span>
                 <span className="text-xs sm:text-sm font-extrabold tabular-nums text-rose-100">
-                  -{formatMoney(totalExpense)}
+                  -{maskMoney(totalExpense)}
                 </span>
               </div>
             </div>
@@ -1207,68 +1400,148 @@ export const HomeView: React.FC<HomeViewProps> = ({
                                 </div>
                               )}
 
-                              {/* Action Buttons to Check Off Next Payment or Undo */}
-                              <div className="flex items-center justify-between gap-2 pt-1">
-                                {!rem.isPaid ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => onStepReminderInstallment(rem.id, 1)}
-                                    className="flex-1 py-2 px-3 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs hover:opacity-95"
-                                  >
-                                    <Check size={14} strokeWidth={2.6} />
-                                    <span>
-                                      تیک زدن واریز قسط {toPersianDigits(paidCount + 1)}
-                                      {remainingCount !== null && remainingCount > 0
-                                        ? ` (مانده بعد از این: ${toPersianDigits(
-                                            remainingCount - 1
-                                          )} قسط)`
-                                        : ''}
+                              {/* Action Buttons to Check Off Next Payment (+ Optional Auto-Deduct from Card/Cash) */}
+                              <div className="space-y-2 pt-1">
+                                {!rem.isPaid && (
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                      <CreditCard size={12} />
+                                      <span>کسر خودکار این قسط از:</span>
                                     </span>
-                                  </button>
-                                ) : (
-                                  <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                    <Award size={14} strokeWidth={2.4} />
-                                    <span>تمام اقساط این تعهد تسویه شده است</span>
-                                  </span>
+                                    <select
+                                      value={installmentPaySourceMap[rem.id] || 'none'}
+                                      onChange={(e) =>
+                                        setInstallmentPaySourceMap((prev) => ({
+                                          ...prev,
+                                          [rem.id]: e.target.value,
+                                        }))
+                                      }
+                                      className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-800 dark:text-slate-200"
+                                    >
+                                      <option value="none">
+                                        فقط تیک قسط (بدون کسر از موجودی کارت)
+                                      </option>
+                                      <option value="cash">
+                                        کسر از موجودی نقدی ({maskMoney(currentCashBalance)})
+                                      </option>
+                                      {cards.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                          کسر از {c.title} (
+                                          {maskMoney(
+                                            getCardCurrentBalance(c.id, c.initialBalance)
+                                          )}
+                                          )
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
                                 )}
 
-                                {paidCount > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onStepReminderInstallment(rem.id, -1)}
-                                    className="px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1"
-                                    title="لغو آخرین تیک واریز و بازگشت قسط"
-                                  >
-                                    <RotateCcw size={12} />
-                                    <span>اصلاح</span>
-                                  </button>
-                                )}
+                                <div className="flex items-center justify-between gap-2">
+                                  {!rem.isPaid ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const chosenSource =
+                                          installmentPaySourceMap[rem.id];
+                                        onStepReminderInstallment(
+                                          rem.id,
+                                          1,
+                                          chosenSource && chosenSource !== 'none'
+                                            ? chosenSource
+                                            : undefined
+                                        );
+                                      }}
+                                      className="flex-1 py-2 px-3 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs hover:opacity-95"
+                                    >
+                                      <Check size={14} strokeWidth={2.6} />
+                                      <span>
+                                        تیک قسط {toPersianDigits(paidCount + 1)}
+                                        {installmentPaySourceMap[rem.id] &&
+                                        installmentPaySourceMap[rem.id] !== 'none'
+                                          ? ' + ثبت خودکار هزینه از حساب'
+                                          : remainingCount !== null && remainingCount > 0
+                                          ? ` (مانده: ${toPersianDigits(
+                                              remainingCount - 1
+                                            )} قسط)`
+                                          : ''}
+                                      </span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                      <Award size={14} strokeWidth={2.4} />
+                                      <span>تمام اقساط این تعهد تسویه شده است</span>
+                                    </span>
+                                  )}
+
+                                  {paidCount > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onStepReminderInstallment(rem.id, -1)}
+                                      className="px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1"
+                                      title="لغو آخرین تیک واریز و بازگشت قسط"
+                                    >
+                                      <RotateCcw size={12} />
+                                      <span>اصلاح</span>
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 pt-1">
                           <span className="tabular-nums">
                             سررسید: {formatJalaliReadable(rem.dueDate)}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => onToggleReminderPaid(rem.id)}
-                            className="text-xs font-bold theme-text hover:underline flex items-center gap-1 cursor-pointer"
-                          >
-                            {rem.isPaid ? (
-                              <>
-                                <RotateCcw size={12} />
-                                <span>برگرداندن به حالت پرداخت‌نشده</span>
-                              </>
-                            ) : (
-                              <>
-                                <Check size={13} strokeWidth={2.5} />
-                                <span>تیک تسویه کامل</span>
-                              </>
+                          <div className="flex items-center gap-2">
+                            {!rem.isPaid && (
+                              <select
+                                value={installmentPaySourceMap[rem.id] || 'none'}
+                                onChange={(e) =>
+                                  setInstallmentPaySourceMap((prev) => ({
+                                    ...prev,
+                                    [rem.id]: e.target.value,
+                                  }))
+                                }
+                                className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300"
+                              >
+                                <option value="none">بدون کسر از کارت</option>
+                                <option value="cash">کسر از نقد</option>
+                                {cards.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    کسر از {c.title}
+                                  </option>
+                                ))}
+                              </select>
                             )}
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const chosenSource = installmentPaySourceMap[rem.id];
+                                onToggleReminderPaid(
+                                  rem.id,
+                                  !rem.isPaid && chosenSource && chosenSource !== 'none'
+                                    ? chosenSource
+                                    : undefined
+                                );
+                              }}
+                              className="text-xs font-bold theme-text hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                              {rem.isPaid ? (
+                                <>
+                                  <RotateCcw size={12} />
+                                  <span>برگرداندن به حالت پرداخت‌نشده</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check size={13} strokeWidth={2.5} />
+                                  <span>تیک تسویه کامل</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1279,6 +1552,254 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* ======================================================================== */}
+      {/* SAVINGS GOALS & VAULTS (قلک‌ها و اهداف پس‌انداز)                          */}
+      {/* ======================================================================== */}
+      {onSaveSavingsGoal && (
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                <Target size={19} />
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                  قلک‌ها و اهداف پس‌انداز ({toPersianDigits(savingsGoals.length)} هدف)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  جدا کردن مبالغ پس‌انداز (سفر، خرید طلا، صندوق اضطراری) از موجودی قابل خرج روزمره
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsAddingGoal((prev) => !prev)}
+              className="px-3.5 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center gap-1 self-start sm:self-auto"
+            >
+              {isAddingGoal ? (
+                <>
+                  <X size={14} />
+                  <span>بستن فرم قلک</span>
+                </>
+              ) : (
+                <>
+                  <Plus size={14} strokeWidth={2.5} />
+                  <span>ساخت قلک / هدف پس‌انداز جدید</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {isAddingGoal && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const targetNum = parseInt(
+                  toEnglishDigits(goalTargetStr).replace(/\D/g, '') || '0',
+                  10
+                );
+                const savedNum = parseInt(
+                  toEnglishDigits(goalInitialSavedStr).replace(/\D/g, '') || '0',
+                  10
+                );
+                if (!goalTitle.trim() || targetNum <= 0) return;
+                onSaveSavingsGoal({
+                  title: goalTitle.trim(),
+                  targetAmount: targetNum,
+                  savedAmount: savedNum,
+                  color: '#10b981',
+                  icon: 'award',
+                });
+                setGoalTitle('');
+                setGoalTargetStr('');
+                setGoalInitialSavedStr('');
+                setIsAddingGoal(false);
+              }}
+              className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end"
+            >
+              <div className="sm:col-span-4">
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                  عنوان قلک / هدف پس‌انداز
+                </label>
+                <input
+                  type="text"
+                  value={goalTitle}
+                  onChange={(e) => setGoalTitle(e.target.value)}
+                  placeholder="مثلاً: خرید طلا، سفر، صندوق اضطراری..."
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                />
+              </div>
+
+              <div className="sm:col-span-3">
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                  مبلغ هدف کل ({settings.currencyUnit})
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={
+                    goalTargetStr
+                      ? formatMoney(
+                          parseInt(
+                            toEnglishDigits(goalTargetStr).replace(/\D/g, '') || '0',
+                            10
+                          )
+                        )
+                      : ''
+                  }
+                  onChange={(e) =>
+                    setGoalTargetStr(toEnglishDigits(e.target.value).replace(/\D/g, ''))
+                  }
+                  placeholder="۵۰،۰۰۰،۰۰۰"
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums"
+                />
+              </div>
+
+              <div className="sm:col-span-3">
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                  پس‌انداز فعلی در این قلک ({settings.currencyUnit})
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={
+                    goalInitialSavedStr
+                      ? formatMoney(
+                          parseInt(
+                            toEnglishDigits(goalInitialSavedStr).replace(/\D/g, '') || '0',
+                            10
+                          )
+                        )
+                      : ''
+                  }
+                  onChange={(e) =>
+                    setGoalInitialSavedStr(
+                      toEnglishDigits(e.target.value).replace(/\D/g, '')
+                    )
+                  }
+                  placeholder="۰"
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <button
+                  type="submit"
+                  className="w-full py-2 px-3 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer"
+                >
+                  ثبت قلک
+                </button>
+              </div>
+            </form>
+          )}
+
+          {savingsGoals.length === 0 ? (
+            <div className="py-5 text-center text-xs text-slate-400">
+              هنوز قلک یا هدف پس‌اندازی نساخته‌اید. با ساخت قلک، مبلغ پس‌انداز از موجودی قابل خرج روزمره تفکیک می‌شود.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {savingsGoals.map((goal) => {
+                const pct =
+                  goal.targetAmount > 0
+                    ? Math.min(100, Math.round((goal.savedAmount / goal.targetAmount) * 100))
+                    : 0;
+                const depositRaw = goalDepositInputs[goal.id] || '';
+                const depositNumeric = parseInt(
+                  toEnglishDigits(depositRaw).replace(/\D/g, '') || '0',
+                  10
+                );
+
+                return (
+                  <div
+                    key={goal.id}
+                    className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                          {goal.title}
+                        </h4>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                          پس‌انداز شده: {maskMoney(goal.savedAmount)} از{' '}
+                          {maskMoney(goal.targetAmount)} {settings.currencyUnit}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                          {toPersianDigits(pct)}٪
+                        </span>
+                        {onDeleteSavingsGoal && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteSavingsGoal(goal.id)}
+                            className="p-1 text-slate-400 hover:text-rose-500 cursor-pointer"
+                            title="حذف قلک"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                      <div
+                        className="h-full rounded-full theme-bg transition-all duration-300"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+
+                    {onUpdateSavingsGoalAmount && (
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={depositNumeric > 0 ? formatMoney(depositNumeric) : ''}
+                          onChange={(e) =>
+                            setGoalDepositInputs((prev) => ({
+                              ...prev,
+                              [goal.id]: toEnglishDigits(e.target.value).replace(/\D/g, ''),
+                            }))
+                          }
+                          placeholder={`مبلغ واریز/برداشت (${settings.currencyUnit})...`}
+                          className="flex-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (depositNumeric <= 0) return;
+                            onUpdateSavingsGoalAmount(goal.id, depositNumeric);
+                            setGoalDepositInputs((prev) => ({ ...prev, [goal.id]: '' }));
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-[11px] font-extrabold cursor-pointer whitespace-nowrap"
+                        >
+                          + واریز به قلک
+                        </button>
+                        {goal.savedAmount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (depositNumeric <= 0) return;
+                              onUpdateSavingsGoalAmount(goal.id, -depositNumeric);
+                              setGoalDepositInputs((prev) => ({ ...prev, [goal.id]: '' }));
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-bold cursor-pointer whitespace-nowrap"
+                          >
+                            - برداشت
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ======================================================================== */}
       {/* VERTICAL TIMELINE OF CURRENT DAY'S TRANSACTIONS BY HOUR (updatedAt)      */}
@@ -1609,6 +2130,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   { id: 'all', label: 'همه تراکنش‌ها' },
                   { id: 'expense', label: 'هزینه‌ها (خرج)' },
                   { id: 'income', label: 'درآمدها (ورودی)' },
+                  { id: 'transfer', label: 'انتقال / عابربانک' },
                 ] as const
               ).map((tab) => (
                 <button
@@ -1650,10 +2172,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
             ? initialCashBalance
             : selectedCardObj?.initialBalance || 0;
           const incSum = transactions
-            .filter((t) => t.cardId === cardFilter && t.type === 'income')
+            .filter(
+              (t) =>
+                (t.cardId === cardFilter && t.type === 'income') ||
+                (t.toCardId === cardFilter && t.type === 'transfer')
+            )
             .reduce((s, t) => s + t.amount, 0);
           const expSum = transactions
-            .filter((t) => t.cardId === cardFilter && t.type === 'expense')
+            .filter(
+              (t) =>
+                (t.cardId === cardFilter && t.type === 'expense') ||
+                (t.cardId === cardFilter && t.type === 'transfer')
+            )
             .reduce((s, t) => s + t.amount, 0);
           const liveBal = initBal + incSum - expSum;
 

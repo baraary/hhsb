@@ -15,6 +15,7 @@ interface BankCardVisualProps {
   transactions: Transaction[];
   currencyUnit: string;
   isMonochrome?: boolean;
+  privacyMode?: boolean;
   onEdit?: (card: BankCard) => void;
   onRandomizeStyle?: (card: BankCard) => void;
   compact?: boolean;
@@ -25,6 +26,7 @@ export const BankCardVisual: React.FC<BankCardVisualProps> = ({
   transactions,
   currencyUnit,
   isMonochrome = false,
+  privacyMode = false,
   onEdit,
   onRandomizeStyle,
   compact = false,
@@ -38,11 +40,19 @@ export const BankCardVisual: React.FC<BankCardVisualProps> = ({
   const bank = IRANIAN_BANKS[effectiveBankId] || IRANIAN_BANKS.other;
 
   const cardIncome = transactions
-    .filter((t) => t.cardId === card.id && t.type === 'income')
+    .filter(
+      (t) =>
+        (t.cardId === card.id && t.type === 'income') ||
+        (t.toCardId === card.id && t.type === 'transfer')
+    )
     .reduce((sum, t) => sum + t.amount, 0);
 
   const cardExpense = transactions
-    .filter((t) => t.cardId === card.id && t.type === 'expense')
+    .filter(
+      (t) =>
+        (t.cardId === card.id && t.type === 'expense') ||
+        (t.cardId === card.id && t.type === 'transfer')
+    )
     .reduce((sum, t) => sum + t.amount, 0);
 
   const currentBalance = card.initialBalance + cardIncome - cardExpense;
@@ -136,7 +146,7 @@ export const BankCardVisual: React.FC<BankCardVisualProps> = ({
           <span className="text-[11px] text-white/80 block">موجودی فعلی کارت</span>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className="text-lg sm:text-xl font-black tabular-nums tracking-tight drop-shadow-2xs">
-              {formatMoney(currentBalance)}
+              {privacyMode ? '•••••••' : formatMoney(currentBalance)}
             </span>
             <span className="text-[11px] text-white/90 font-normal">
               {currencyUnit}

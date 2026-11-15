@@ -1,6 +1,6 @@
 export type PersonId = 'hootan' | 'fatemeh' | 'shared' | string;
 export type RecorderId = 'hootan' | 'fatemeh' | string;
-export type TransactionType = 'expense' | 'income';
+export type TransactionType = 'expense' | 'income' | 'transfer';
 export type ColorThemeId =
   | 'emerald'
   | 'ocean'
@@ -150,12 +150,24 @@ export interface Transaction {
   spentBy: string;
   recordedBy: string;
   cardId: string; // bank card id or 'cash' for Cash Balance
+  toCardId?: string; // Destination cardId or 'cash' when type === 'transfer'
   jalaliDate: string; // YYYY/MM/DD e.g., 1403/08/14
   time: string; // HH:mm e.g., 19:45
   note?: string;
   smsHash?: string; // Prevents duplicate bank SMS imports
   createdAt: number;
   updatedAt?: number;
+}
+
+export interface SavingsGoal {
+  id: string;
+  title: string;
+  targetAmount: number;
+  savedAmount: number;
+  color: string;
+  icon: string;
+  cardId?: string;
+  createdAt: number;
 }
 
 export interface BudgetGoal {
@@ -207,6 +219,8 @@ export interface AppSettings {
   pinHash?: string; // Salted SHA-256 hash of PIN
   biometricCredentialId?: string; // WebAuthn Passkey ID for Fingerprint / FaceID
   enableAesEncryption?: boolean; // AES-256-GCM encrypted vault active
+  privacyMode?: boolean; // Masks monetary numbers in public places
+  cardsViewMode?: 'grid' | 'carousel'; // Persists user choice between previous grid view and scrollable carousel view
   monthlyTotalBudget: number; // Personal monthly total budget
   initialCashBalance?: number; // Base cash wallet balance (موجودی نقدی اولیه)
   autoCheckClipboardSms?: boolean;
@@ -231,6 +245,7 @@ export interface AppState {
   tags: TagItem[];
   budgets: BudgetGoal[];
   reminders?: DueReminder[];
+  savingsGoals?: SavingsGoal[];
   dismissedReminderIds?: string[];
   importedSmsHashes?: string[];
   encryptedVault?: EncryptedVaultPayload;

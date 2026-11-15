@@ -11,6 +11,8 @@ import {
   X,
   Trash2,
   Fingerprint,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   AppState,
@@ -20,6 +22,7 @@ import {
   TagItem,
   DueReminder,
   UserAccount,
+  SavingsGoal,
 } from './types';
 import {
   DEFAULT_USERS,
@@ -34,11 +37,13 @@ import { SettingsView } from './components/SettingsView';
 import { TransactionModal } from './components/TransactionModal';
 import { BankSmsModal } from './components/BankSmsModal';
 import { OfflineIndicator } from './components/PWAInstallButton';
+import { GlassPinPad } from './components/GlassPinPad';
 import {
   toEnglishDigits,
   advanceJalaliDate,
   rewindJalaliDate,
   getCurrentJalaliDateStr,
+  getCurrentTimeStr,
 } from './utils/persian';
 import {
   isLikelyBankSms,
@@ -1405,13 +1410,17 @@ export default function App() {
     }));
   };
 
-  // Step installment check-off (+1 or -1) for recurring reminders
-  const handleStepReminderInstallment = (id: string, delta: 1 | -1) => {
+  // Step installment check-off (+1 or -1) for recurring reminders (+ optional auto-deduct from card/cash)
+  const handleStepReminderInstallment = (
+    id: string,
+    delta: 1 | -1,
+    deductFromCardId?: string
+  ) => {
     hasUserEditedRef.current = true;
-    setState((prev) => ({
-      ...prev,
-      updatedAt: Date.now(),
-      reminders: (prev.reminders || []).map((r) => {
+    const now = Date.now();
+    setState((prev) => {
+      const targetRem = (prev.reminders || []).find((r) => r.id === id);
+      const nextReminders = (prev.reminders || []).map((r) => {
         if (r.id !== id) return r;
         const recurrence = r.recurrence || 'once';
         const currentPaid = r.paidInstallments || 0;
@@ -1459,16 +1468,57 @@ export default function App() {
             isPaid: false,
           };
         }
-      }),
-    }));
+      });
+
+      // If deductFromCardId is provided and delta === 1, auto-record the installment payment transaction
+      let nextTransactions = prev.transactions;
+      if (delta === 1 && deductFromCardId && targetRem) {
+        const nextInstNum = (targetRem.paidInstallments || 0) + 1;
+        const isReceivable = targetRem.category === 'receivable';
+        const matchedCat =
+          prev.categories.find(
+            (c) =>
+              c.type === (isReceivable ? 'income' : 'expense') &&
+              (c.name.includes('اقساط') || c.name.includes('وام') || c.name.includes('مسکن'))
+          ) ||
+          prev.categories.find((c) => c.type === (isReceivable ? 'income' : 'expense')) ||
+          prev.categories[0];
+
+        const autoTx: Transaction = {
+          id: `tx_inst_${now}`,
+          title: `پرداخت قسط ${nextInstNum}: ${targetRem.title}`,
+          amount: targetRem.amount,
+          type: isReceivable ? 'income' : 'expense',
+          categoryId: matchedCat?.id || 'cat_bills',
+          subCategoryId: matchedCat?.subCategories[0]?.id || '',
+          tags: ['tag_installment'],
+          spentBy: prev.userId || activeUserId,
+          recordedBy: prev.userId || activeUserId,
+          cardId: deductFromCardId,
+          jalaliDate: getCurrentJalaliDateStr(),
+          time: getCurrentTimeStr(),
+          note: 'ثبت و کسر خودکار هنگام تیک زدن قسط',
+          createdAt: now,
+          updatedAt: now,
+        };
+        nextTransactions = [autoTx, ...prev.transactions];
+      }
+
+      return {
+        ...prev,
+        updatedAt: now,
+        reminders: nextReminders,
+        transactions: nextTransactions,
+      };
+    });
   };
 
-  const handleToggleReminderPaid = (id: string) => {
+  const handleToggleReminderPaid = (id: string, deductFromCardId?: string) => {
     hasUserEditedRef.current = true;
-    setState((prev) => ({
-      ...prev,
-      updatedAt: Date.now(),
-      reminders: (prev.reminders || []).map((r) => {
+    const now = Date.now();
+    setState((prev) => {
+      const targetRem = (prev.reminders || []).find((r) => r.id === id);
+      const nextReminders = (prev.reminders || []).map((r) => {
         if (r.id !== id) return r;
         const recurrence = r.recurrence || 'once';
 
@@ -1496,8 +1546,42 @@ export default function App() {
         }
 
         return { ...r, isPaid: !r.isPaid };
-      }),
-    }));
+      });
+
+      let nextTransactions = prev.transactions;
+      if (targetRem && !targetRem.isPaid && deductFromCardId) {
+        const isReceivable = targetRem.category === 'receivable';
+        const matchedCat =
+          prev.categories.find((c) => c.type === (isReceivable ? 'income' : 'expense')) ||
+          prev.categories[0];
+
+        const autoTx: Transaction = {
+          id: `tx_rem_${now}`,
+          title: `تسویه تعهد: ${targetRem.title}`,
+          amount: targetRem.amount,
+          type: isReceivable ? 'income' : 'expense',
+          categoryId: matchedCat?.id || 'cat_bills',
+          subCategoryId: matchedCat?.subCategories[0]?.id || '',
+          tags: ['tag_debt'],
+          spentBy: prev.userId || activeUserId,
+          recordedBy: prev.userId || activeUserId,
+          cardId: deductFromCardId,
+          jalaliDate: getCurrentJalaliDateStr(),
+          time: getCurrentTimeStr(),
+          note: 'ثبت و کسر خودکار هنگام تسویه یادآور',
+          createdAt: now,
+          updatedAt: now,
+        };
+        nextTransactions = [autoTx, ...prev.transactions];
+      }
+
+      return {
+        ...prev,
+        updatedAt: now,
+        reminders: nextReminders,
+        transactions: nextTransactions,
+      };
+    });
   };
 
   const handleDeleteReminder = (id: string) => {
@@ -1509,6 +1593,46 @@ export default function App() {
       dismissedReminderIds: Array.from(
         new Set([...(prev.dismissedReminderIds || []), id])
       ),
+    }));
+  };
+
+  // Savings Goals (قلک‌ها و اهداف پس‌انداز) CRUD
+  const handleSaveSavingsGoal = (goalData: Omit<SavingsGoal, 'id' | 'createdAt'>) => {
+    hasUserEditedRef.current = true;
+    const now = Date.now();
+    setState((prev) => ({
+      ...prev,
+      updatedAt: now,
+      savingsGoals: [
+        ...(prev.savingsGoals || []),
+        {
+          ...goalData,
+          id: `goal_${now}`,
+          createdAt: now,
+        },
+      ],
+    }));
+  };
+
+  const handleUpdateSavingsGoalAmount = (goalId: string, deltaAmount: number) => {
+    hasUserEditedRef.current = true;
+    setState((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      savingsGoals: (prev.savingsGoals || []).map((g) =>
+        g.id === goalId
+          ? { ...g, savedAmount: Math.max(0, (g.savedAmount || 0) + deltaAmount) }
+          : g
+      ),
+    }));
+  };
+
+  const handleDeleteSavingsGoal = (goalId: string) => {
+    hasUserEditedRef.current = true;
+    setState((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      savingsGoals: (prev.savingsGoals || []).filter((g) => g.id !== goalId),
     }));
   };
 
@@ -1718,46 +1842,43 @@ export default function App() {
               </p>
             </div>
           ) : currentAccountPin ? (
-            /* Case A: Account has a 4-digit PIN — Require it to unlock! */
+            /* Case A: Account has a 4-digit PIN — Glassmorphic Touch Numeric PinPad + Biometric! */
             <div className="space-y-4">
               <div>
                 <h1 className="text-base sm:text-lg font-black">
                   ورود به حساب شخصی «{currentUserName}»
                 </h1>
                 <p className="text-xs text-slate-400 mt-1">
-                  لطفاً رمز ۴ رقمی اختصاصی حساب «{currentUserName}» را وارد کنید
+                  رمز ۴ رقمی اختصاصی حساب «{currentUserName}» را لمس یا تایپ کنید
                 </p>
               </div>
 
-              <input
-                type="password"
-                dir="ltr"
-                maxLength={4}
-                inputMode="numeric"
-                autoFocus
-                disabled={pinLockoutUntil > Date.now()}
+              <GlassPinPad
                 value={pinInput}
-                onChange={(e) => {
+                disabled={pinLockoutUntil > Date.now()}
+                hasError={pinError}
+                showBiometric={Boolean(activeBiometricCredId)}
+                onBiometricClick={() => handleBiometricLogin(activeUserObj, false)}
+                onChange={(rawVal) => {
                   if (pinLockoutUntil > Date.now()) return;
-                  const val = toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4);
+                  const val = toEnglishDigits(rawVal).replace(/\D/g, '').slice(0, 4);
                   setPinInput(val);
                   setPinError(false);
                   setPinErrorDetail('');
                   if (val.length === 4) {
                     if (doesPinMatchUser(activeUserId, val, currentAccountPin)) {
-                      // Strictly unlock ONLY the currently selected activeUserObj (with AES-256 vault support)
                       unlockVerifiedAccount(activeUserObj, val);
                     } else {
                       const nextAttempts = failedPinAttempts + 1;
                       setFailedPinAttempts(nextAttempts);
                       setPinError(true);
+                      setTimeout(() => setPinInput(''), 350);
                       if (nextAttempts >= 5) {
                         setPinLockoutUntil(Date.now() + 30000);
                         setPinErrorDetail(
                           'به دلیل ۵ بار ورود رمز اشتباه، ورود به مدت ۳۰ ثانیه قفل شد.'
                         );
                       } else {
-                        // Never auto-switch into another user's account! Warn the user if they forgot to select their own tab first.
                         const matchedOtherUser = users.find(
                           (u) =>
                             u.id !== activeUserId &&
@@ -1776,8 +1897,6 @@ export default function App() {
                     }
                   }
                 }}
-                placeholder="••••"
-                className="w-44 mx-auto block px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums text-white disabled:opacity-40"
               />
 
               {/* Option 3: Biometric Passkey (Fingerprint / FaceID) Login Button */}
@@ -1795,13 +1914,13 @@ export default function App() {
               {pinError && (
                 <p className="text-xs text-rose-400 font-bold leading-relaxed">
                   {pinErrorDetail ||
-                    `رمز وارد شده اشتباه است. بدون رمز اجازه ورود به حساب «{currentUserName}» وجود ندارد.`}
+                    `رمز وارد شده اشتباه است. بدون رمز اجازه ورود به حساب «${currentUserName}» وجود ندارد.`}
                 </p>
               )}
 
               <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-semibold">
                 <ShieldCheck size={13} className="text-emerald-400 shrink-0" />
-                <span>محافظت‌شده با رمزنگاری AES-256-GCM و پشتیبانی از ورود بیومتریک</span>
+                <span>محافظت‌شده با رمزنگاری AES-256-GCM و صفحه‌کلید شیشه‌ای اختصاصی</span>
               </div>
             </div>
           ) : (
@@ -1921,8 +2040,27 @@ export default function App() {
             ))}
           </nav>
 
-          {/* Zone 3: Primary Action CTA */}
+          {/* Zone 3: Privacy Blur Toggle + Primary Action CTA */}
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() =>
+                handleUpdateSettings({ privacyMode: !state.settings.privacyMode })
+              }
+              title={
+                state.settings.privacyMode
+                  ? 'نمایش اعداد و موجودی‌ها'
+                  : 'مخفی‌سازی اعداد در جمع (حالت حریم خصوصی)'
+              }
+              className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                state.settings.privacyMode
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400'
+                  : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              {state.settings.privacyMode ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -2138,6 +2276,12 @@ export default function App() {
                 onUpdateCashBalance={(newCash) =>
                   handleUpdateSettings({ initialCashBalance: newCash })
                 }
+                onTogglePrivacyMode={() =>
+                  handleUpdateSettings({ privacyMode: !state.settings.privacyMode })
+                }
+                onSaveSavingsGoal={handleSaveSavingsGoal}
+                onUpdateSavingsGoalAmount={handleUpdateSavingsGoalAmount}
+                onDeleteSavingsGoal={handleDeleteSavingsGoal}
               />
             )}
 
@@ -2148,6 +2292,9 @@ export default function App() {
                 onDeleteCard={handleDeleteCard}
                 onUpdateCashBalance={(newCash) =>
                   handleUpdateSettings({ initialCashBalance: newCash })
+                }
+                onChangeCardsViewMode={(mode) =>
+                  handleUpdateSettings({ cardsViewMode: mode })
                 }
                 onEditTransaction={(tx) => {
                   setEditingTx(tx);
@@ -2277,15 +2424,15 @@ export default function App() {
                 </p>
               </div>
 
-              <input
-                type="password"
-                dir="ltr"
-                maxLength={4}
-                inputMode="numeric"
-                disabled={isCheckingRemotePin}
+              <GlassPinPad
                 value={switchPinInput}
-                onChange={(e) => {
-                  const val = toEnglishDigits(e.target.value).replace(/\D/g, '').slice(0, 4);
+                disabled={isCheckingRemotePin}
+                hasError={Boolean(switchPinError)}
+                lightMode
+                showBiometric={Boolean(switchTargetBiometricCredId && !isCheckingRemotePin)}
+                onBiometricClick={() => handleBiometricLogin(switchTargetUserObj, true)}
+                onChange={(rawVal) => {
+                  const val = toEnglishDigits(rawVal).replace(/\D/g, '').slice(0, 4);
                   setSwitchPinInput(val);
                   setSwitchPinError('');
                   if (effectiveTargetPin && val.length === 4) {
@@ -2295,11 +2442,10 @@ export default function App() {
                       setSwitchPinError(
                         `رمز وارد شده اشتباه است! بدون رمز «${switchTargetUserObj.name}» امکان ورود وجود ندارد.`
                       );
+                      setTimeout(() => setSwitchPinInput(''), 350);
                     }
                   }
                 }}
-                placeholder="••••"
-                className="w-40 mx-auto block px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center text-2xl tracking-widest font-sans tabular-nums text-slate-900 dark:text-white"
               />
 
               {switchTargetBiometricCredId && !isCheckingRemotePin && (

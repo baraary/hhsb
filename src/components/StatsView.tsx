@@ -8,6 +8,7 @@ import {
 } from '../utils/persian';
 import { CircularIcon } from './CircularIcon';
 import { BankLogoVector, IRANIAN_BANKS } from '../utils/iranianBanks';
+import { FinancialCalendarHeatmap } from './FinancialCalendarHeatmap';
 import { ArrowLeft } from 'lucide-react';
 import { MonthlyReportChart } from './MonthlyReportChart';
 
@@ -806,6 +807,9 @@ export const StatsView: React.FC<StatsViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Jalali Financial Heatmap Calendar */}
+      <FinancialCalendarHeatmap state={state} monthKey={selectedMonth} />
     </div>
   );
 };
