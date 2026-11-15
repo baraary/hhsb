@@ -219,30 +219,54 @@ export async function registerBiometricForUser(
     const challenge = window.crypto.getRandomValues(new Uint8Array(32));
     const userIdBytes = new TextEncoder().encode(`hamhesab_user_${userId}`);
 
-    const credential = (await navigator.credentials.create({
-      publicKey: {
-        challenge,
-        rp: {
-          name: 'هم‌حساب (HamHesab)',
-          id: window.location.hostname,
+    let credential: PublicKeyCredential | null = null;
+    try {
+      credential = (await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: {
+            name: 'هم‌حساب (HamHesab)',
+          },
+          user: {
+            id: userIdBytes,
+            name: `${userName} (${userId})`,
+            displayName: userName,
+          },
+          pubKeyCredParams: [
+            { type: 'public-key', alg: -7 }, // ES256
+            { type: 'public-key', alg: -257 }, // RS256
+          ],
+          authenticatorSelection: {
+            authenticatorAttachment: 'platform',
+            userVerification: 'preferred',
+          },
+          timeout: 60000,
         },
-        user: {
-          id: userIdBytes,
-          name: `${userName} (${userId})`,
-          displayName: userName,
+      })) as PublicKeyCredential | null;
+    } catch {
+      // Fallback without strict authenticatorAttachment for devices using hybrid/system passkeys
+      credential = (await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: {
+            name: 'هم‌حساب (HamHesab)',
+          },
+          user: {
+            id: userIdBytes,
+            name: `${userName} (${userId})`,
+            displayName: userName,
+          },
+          pubKeyCredParams: [
+            { type: 'public-key', alg: -7 },
+            { type: 'public-key', alg: -257 },
+          ],
+          authenticatorSelection: {
+            userVerification: 'preferred',
+          },
+          timeout: 60000,
         },
-        pubKeyCredParams: [
-          { type: 'public-key', alg: -7 }, // ES256
-          { type: 'public-key', alg: -257 }, // RS256
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: 'platform',
-          userVerification: 'required',
-          residentKey: 'preferred',
-        },
-        timeout: 60000,
-      },
-    })) as PublicKeyCredential | null;
+      })) as PublicKeyCredential | null;
+    }
 
     if (!credential || !credential.rawId) {
       return { ok: false, error: 'ثبت اثر انگشت یا تشخیص چهره لغو شد.' };
@@ -259,14 +283,14 @@ export async function registerBiometricForUser(
 
     return { ok: true, credentialIdBase64 };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : '';
+    const msg = err instanceof Error ? `${err.name}: ${err.message}` : '';
     if (msg.includes('NotAllowedError') || msg.includes('AbortError')) {
       return { ok: false, error: 'عملیات تایید اثر انگشت / چهره توسط کاربر لغو شد.' };
     }
     return {
       ok: false,
       error:
-        'امکان ثبت اثر انگشت در این قاب (iframe) یا مرورگر وجود ندارد. لطفاً لینک مستقیم اپ را در مرورگر گوشی باز کنید.',
+        'امکان ثبت اثر انگشت در قاب پیش‌نمایش (iframe) وجود ندارد؛ در لینک اصلی گیت‌هاب یا مرورگر گوشی مستقیماً کار می‌کند.',
     };
   }
 }
@@ -289,7 +313,8 @@ export async function authenticateBiometricForUser(
   if (!credIdBase64) {
     return {
       ok: false,
-      error: 'برای این حساب در این دستگاه هنوز اثر انگشت یا چهره ثبت نشده است.',
+      error:
+        'برای این حساب در این دستگاه هنوز اثر انگشت ثبت نشده است. یک‌بار با رمز ۴ رقمی وارد شوید و از نوار بالا روی دکمه «ثبت اثر انگشت» بزنید.',
     };
   }
 
@@ -300,15 +325,13 @@ export async function authenticateBiometricForUser(
     const assertion = (await navigator.credentials.get({
       publicKey: {
         challenge,
-        rpId: window.location.hostname,
         allowCredentials: [
           {
             type: 'public-key',
             id: rawCredId as BufferSource,
-            transports: ['internal'],
           },
         ],
-        userVerification: 'required',
+        userVerification: 'preferred',
         timeout: 60000,
       },
     })) as PublicKeyCredential | null;

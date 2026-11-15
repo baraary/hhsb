@@ -60,7 +60,6 @@ import {
 } from './utils/githubSync';
 import {
   decryptUserVault,
-  isBiometricWebAuthnSupported,
   getBiometricCredentialForUser,
   registerBiometricForUser,
   authenticateBiometricForUser,
@@ -1857,7 +1856,7 @@ export default function App() {
                 value={pinInput}
                 disabled={pinLockoutUntil > Date.now()}
                 hasError={pinError}
-                showBiometric={Boolean(activeBiometricCredId)}
+                showBiometric={true}
                 onBiometricClick={() => handleBiometricLogin(activeUserObj, false)}
                 onChange={(rawVal) => {
                   if (pinLockoutUntil > Date.now()) return;
@@ -1900,16 +1899,22 @@ export default function App() {
               />
 
               {/* Option 3: Biometric Passkey (Fingerprint / FaceID) Login Button */}
-              {activeBiometricCredId && (
-                <button
-                  type="button"
-                  onClick={() => handleBiometricLogin(activeUserObj, false)}
-                  className="w-full py-2.5 px-4 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-extrabold cursor-pointer flex items-center justify-center gap-2 transition-all"
-                >
-                  <Fingerprint size={16} />
-                  <span>ورود سریع به حساب «{currentUserName}» با اثر انگشت / چهره</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => handleBiometricLogin(activeUserObj, false)}
+                className={`w-full py-2.5 px-4 rounded-2xl border text-xs font-extrabold cursor-pointer flex items-center justify-center gap-2 transition-all ${
+                  activeBiometricCredId
+                    ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-300'
+                    : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-300'
+                }`}
+              >
+                <Fingerprint size={16} className="text-emerald-400" />
+                <span>
+                  {activeBiometricCredId
+                    ? `ورود سریع به حساب «${currentUserName}» با اثر انگشت / چهره`
+                    : `ورود با اثر انگشت / چهره (نیازمند ثبت اولیه از نوار بالا)`}
+                </span>
+              </button>
 
               {pinError && (
                 <p className="text-xs text-rose-400 font-bold leading-relaxed">
@@ -1990,16 +1995,16 @@ export default function App() {
     >
       {/* Top Bar Contract: 3 Clean Zones */}
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-          {/* Zone 1: Brand Title + Active User Switcher Button */}
-          <div className="flex items-center gap-2.5 shrink-0">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
+          {/* Zone 1: Brand Title + Active User Switcher Button + Direct Fingerprint Button */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <a
               href="#top"
               onClick={(e) => {
                 e.preventDefault();
                 handleTabChange(0);
               }}
-              className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white whitespace-nowrap"
+              className="text-sm sm:text-lg font-black tracking-tight text-slate-900 dark:text-white whitespace-nowrap"
             >
               هم‌حساب
             </a>
@@ -2007,7 +2012,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsUserSwitcherOpen((prev) => !prev)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 text-xs font-extrabold text-slate-800 dark:text-slate-100 cursor-pointer transition-all"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 text-xs font-extrabold text-slate-800 dark:text-slate-100 cursor-pointer transition-all"
               title="مدیریت و امنیت حساب کاربری"
             >
               <span
@@ -2020,6 +2025,30 @@ export default function App() {
               <Lock size={11} className="text-emerald-500" />
               <ChevronDown size={13} className="text-slate-400" />
             </button>
+
+            {/* Always-Visible Top-Bar Biometric (Fingerprint / FaceID) Quick Action */}
+            {activeBiometricCredId ? (
+              <button
+                type="button"
+                onClick={handleRemoveBiometricForCurrentUser}
+                title="اثر انگشت / چهره برای این حساب فعال است (برای غیرفعال‌سازی کلیک کنید)"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-700 dark:text-emerald-300 text-[11px] font-extrabold cursor-pointer transition-all shrink-0"
+              >
+                <Fingerprint size={15} />
+                <span className="hidden xs:inline sm:inline">بیومتریک فعال</span>
+                <Check size={12} strokeWidth={2.8} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleRegisterBiometricForCurrentUser}
+                title="ثبت اثر انگشت یا تشخیص چهره برای ورود سریع به این حساب"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/35 text-sky-700 dark:text-sky-300 text-[11px] font-extrabold cursor-pointer transition-all shrink-0"
+              >
+                <Fingerprint size={15} />
+                <span>ثبت اثر انگشت</span>
+              </button>
+            )}
           </div>
 
           {/* Zone 2: Desktop Navigation Links */}
@@ -2041,7 +2070,7 @@ export default function App() {
           </nav>
 
           {/* Zone 3: Privacy Blur Toggle + Primary Action CTA */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={() =>
@@ -2067,13 +2096,23 @@ export default function App() {
                 setEditingTx(null);
                 setIsTxModalOpen(true);
               }}
-              className="px-4 py-2 rounded-xl theme-gradient text-white text-xs font-extrabold shadow-sm hover:opacity-95 active:scale-95 transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1"
+              className="px-3 sm:px-4 py-2 rounded-xl theme-gradient text-white text-xs font-extrabold shadow-sm hover:opacity-95 active:scale-95 transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1"
             >
               <Plus size={14} strokeWidth={2.6} />
               <span>ثبت تراکنش</span>
             </button>
           </div>
         </div>
+
+        {/* Always-Visible Toast Notification Strip in Header (shows Biometric & User status even when dropdown is closed) */}
+        {userCreatedToast && !isUserSwitcherOpen && (
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2.5">
+            <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-700 dark:text-emerald-300 text-xs font-bold text-center flex items-center justify-center gap-2">
+              <Fingerprint size={15} className="shrink-0" />
+              <span>{userCreatedToast}</span>
+            </div>
+          </div>
+        )}
 
         {/* Quick User Account Switcher Dropdown Bar (Strict Password-Protected) */}
         {isUserSwitcherOpen && (
@@ -2139,28 +2178,26 @@ export default function App() {
                   );
                 })}
 
-                { isBiometricWebAuthnSupported() && (
-                  activeBiometricCredId ? (
-                    <button
-                      type="button"
-                      onClick={handleRemoveBiometricForCurrentUser}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
-                      title="اثر انگشت / چهره برای این حساب فعال است (کلیک برای غیرفعال‌سازی)"
-                    >
-                      <Fingerprint size={13} />
-                      <span>بیومتریکِ {currentUserName} فعال است</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleRegisterBiometricForCurrentUser}
-                      className="px-3 py-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/25 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
-                      title="ثبت اثر انگشت یا تشخیص چهره گوشی برای ورود سریع به این حساب"
-                    >
-                      <Fingerprint size={13} />
-                      <span>ثبت اثر انگشت / چهره برای {currentUserName}</span>
-                    </button>
-                  )
+                {activeBiometricCredId ? (
+                  <button
+                    type="button"
+                    onClick={handleRemoveBiometricForCurrentUser}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
+                    title="اثر انگشت / چهره برای این حساب فعال است (کلیک برای غیرفعال‌سازی)"
+                  >
+                    <Fingerprint size={13} />
+                    <span>بیومتریکِ {currentUserName} فعال است</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRegisterBiometricForCurrentUser}
+                    className="px-3 py-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/25 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
+                    title="ثبت اثر انگشت یا تشخیص چهره گوشی برای ورود سریع به این حساب"
+                  >
+                    <Fingerprint size={13} />
+                    <span>ثبت اثر انگشت / چهره برای {currentUserName}</span>
+                  </button>
                 )}
 
                 <button
@@ -2429,7 +2466,7 @@ export default function App() {
                 disabled={isCheckingRemotePin}
                 hasError={Boolean(switchPinError)}
                 lightMode
-                showBiometric={Boolean(switchTargetBiometricCredId && !isCheckingRemotePin)}
+                showBiometric={!isCheckingRemotePin}
                 onBiometricClick={() => handleBiometricLogin(switchTargetUserObj, true)}
                 onChange={(rawVal) => {
                   const val = toEnglishDigits(rawVal).replace(/\D/g, '').slice(0, 4);
