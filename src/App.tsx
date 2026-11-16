@@ -198,11 +198,12 @@ function loadIsolatedUserState(user: UserAccount): AppState {
           },
         };
         if (
-          !mergedLocal.settings.currencyMigratedToRial &&
+          !parsed.settings?.defaultedToRialV2 &&
           mergedLocal.settings.currencyUnit === 'تومان'
         ) {
           return scaleAppStateCurrency(mergedLocal, 'ریال');
         }
+        mergedLocal.settings.defaultedToRialV2 = true;
         return mergedLocal;
       }
     }
@@ -220,6 +221,7 @@ function loadIsolatedUserState(user: UserAccount): AppState {
   );
   fresh.settings.pinCode =
     user.pinCode || KNOWN_USER_DEFAULT_PINS[user.id]?.[0] || '';
+  fresh.settings.defaultedToRialV2 = true;
   return fresh;
 }
 
@@ -783,12 +785,22 @@ export default function App() {
               },
             };
             if (
-              !rawMerged.settings.currencyMigratedToRial &&
+              !remoteData.settings?.defaultedToRialV2 &&
               rawMerged.settings.currencyUnit === 'تومان'
             ) {
+              hasUserEditedRef.current = true;
               return scaleAppStateCurrency(rawMerged, 'ریال');
             }
+            rawMerged.settings.defaultedToRialV2 = true;
             return rawMerged;
+          }
+
+          if (
+            !prev.settings.defaultedToRialV2 &&
+            prev.settings.currencyUnit === 'تومان'
+          ) {
+            hasUserEditedRef.current = true;
+            return scaleAppStateCurrency(prev, 'ریال');
           }
 
           // Even if localUpdated >= remoteUpdated, ALWAYS preserve remote PIN & recovered token!
@@ -1469,10 +1481,17 @@ export default function App() {
     setState((prev) => {
       let baseState = prev;
       if (
-        partial.currencyUnit &&
-        partial.currencyUnit !== prev.settings.currencyUnit
+        !baseState.settings.defaultedToRialV2 &&
+        baseState.settings.currencyUnit === 'تومان' &&
+        !partial.currencyUnit
       ) {
-        baseState = scaleAppStateCurrency(prev, partial.currencyUnit);
+        baseState = scaleAppStateCurrency(baseState, 'ریال');
+      }
+      if (
+        partial.currencyUnit &&
+        partial.currencyUnit !== baseState.settings.currencyUnit
+      ) {
+        baseState = scaleAppStateCurrency(baseState, partial.currencyUnit);
       }
       const nextState: AppState = {
         ...baseState,
@@ -1481,6 +1500,7 @@ export default function App() {
           ...baseState.settings,
           ...partial,
           currencyMigratedToRial: true,
+          defaultedToRialV2: true,
         },
       };
       if (partial.pinCode) {

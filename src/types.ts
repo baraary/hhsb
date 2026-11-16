@@ -213,6 +213,7 @@ export interface AppSettings {
   sharedLabel: string; // Kept for backward compatibility
   currencyUnit: 'تومان' | 'ریال';
   currencyMigratedToRial?: boolean;
+  defaultedToRialV2?: boolean;
   darkMode: boolean;
   themeMode?: ThemeMode;
   colorTheme: ColorThemeId;

@@ -173,6 +173,7 @@ export function scaleAppStateCurrency(
         ...state.settings,
         currencyUnit: targetUnit,
         currencyMigratedToRial: true,
+        defaultedToRialV2: true,
       },
     };
   }
@@ -208,6 +209,7 @@ export function scaleAppStateCurrency(
       ...state.settings,
       currencyUnit: targetUnit,
       currencyMigratedToRial: true,
+      defaultedToRialV2: true,
       monthlyTotalBudget: scaleNum(state.settings?.monthlyTotalBudget),
       initialCashBalance:
         state.settings?.initialCashBalance !== undefined
@@ -242,7 +244,6 @@ export function createCleanUserState(
       fatemehName: '',
       sharedLabel: '',
       currencyUnit: 'ریال',
-      currencyMigratedToRial: true,
       darkMode: true,
       themeMode: 'system',
       colorTheme,
