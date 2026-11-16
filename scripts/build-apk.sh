@@ -94,6 +94,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.telephony.SmsMessage;
+import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
@@ -151,6 +152,52 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean isBiometricSupported() {
             return Build.VERSION.SDK_INT >= 28;
+        }
+
+        @JavascriptInterface
+        public void setSystemBarsColor(final String hexColor, final boolean darkIcons) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        int parsedColor = Color.parseColor(hexColor != null && !hexColor.isEmpty() ? hexColor : "#020617");
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            Window window = getWindow();
+                            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+                            window.setStatusBarColor(parsedColor);
+                            window.setNavigationBarColor(parsedColor);
+                            if (Build.VERSION.SDK_INT >= 28) {
+                                window.setNavigationBarDividerColor(parsedColor);
+                            }
+                            View decorView = window.getDecorView();
+                            if (decorView != null) {
+                                int flags = decorView.getSystemUiVisibility();
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                    if (darkIcons) {
+                                        flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                                    } else {
+                                        flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                                    }
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    if (darkIcons) {
+                                        flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                                    } else {
+                                        flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                                    }
+                                }
+                                decorView.setSystemUiVisibility(flags);
+                            }
+                        }
+                        if (webView != null) {
+                            webView.setBackgroundColor(parsedColor);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
         }
 
         @JavascriptInterface
@@ -272,12 +319,12 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             Window window = getWindow();
             window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            window.setStatusBarColor(Color.parseColor("#0f172a"));
-            window.setNavigationBarColor(Color.parseColor("#0f172a"));
+            window.setStatusBarColor(Color.parseColor("#020617"));
+            window.setNavigationBarColor(Color.parseColor("#020617"));
         }
 
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.parseColor("#0f172a"));
+        webView.setBackgroundColor(Color.parseColor("#020617"));
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);

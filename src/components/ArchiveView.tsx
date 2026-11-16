@@ -412,28 +412,60 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
               هیچ تراکنشی با فیلترهای وارد شده مطابقت ندارد.
             </p>
           ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="space-y-2.5">
               {monthFiltered.map((tx) => {
                 const cat = categories.find((c) => c.id === tx.categoryId);
                 const sub = cat?.subCategories.find((s) => s.id === tx.subCategoryId);
                 const card = cards.find((c) => c.id === tx.cardId);
+
+                const txRowColorClass =
+                  tx.type === 'expense'
+                    ? 'bg-rose-50/85 hover:bg-rose-100/80 dark:bg-rose-950/30 dark:hover:bg-rose-950/45 border-rose-200/80 dark:border-rose-800/50 border-r-4 border-r-rose-500'
+                    : tx.type === 'income'
+                    ? 'bg-emerald-50/85 hover:bg-emerald-100/80 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/45 border-emerald-200/80 dark:border-emerald-800/50 border-r-4 border-r-emerald-500'
+                    : 'bg-sky-50/85 hover:bg-sky-100/80 dark:bg-sky-950/30 dark:hover:bg-sky-950/45 border-sky-200/80 dark:border-sky-800/50 border-r-4 border-r-sky-500';
+
+                const txBadgeClass =
+                  tx.type === 'expense'
+                    ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                    : tx.type === 'income'
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-sky-500/15 text-sky-700 dark:text-sky-300';
+
                 return (
                   <div
                     key={tx.id}
                     onClick={() => onEditTransaction(tx)}
-                    className="py-3 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 px-2 -mx-2 rounded-xl cursor-pointer"
+                    className={`p-3.5 flex items-center justify-between gap-3 rounded-2xl border transition-all cursor-pointer ${txRowColorClass}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <CircularIcon
                         name={cat?.icon || 'layers'}
-                        color={cat?.color || '#10b981'}
+                        color={
+                          tx.type === 'expense'
+                            ? '#f43f5e'
+                            : tx.type === 'income'
+                            ? '#10b981'
+                            : '#0ea5e9'
+                        }
                         size="sm"
                       />
                       <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
-                          {tx.title}
-                        </h4>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                            {tx.title}
+                          </h4>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-lg font-extrabold ${txBadgeClass}`}
+                          >
+                            {tx.type === 'expense'
+                              ? 'هزینه'
+                              : tx.type === 'income'
+                              ? 'درآمد'
+                              : 'کارت‌به‌کارت'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 tabular-nums">
                           {cat?.name} · {sub?.name}
                           {card ? ` · ${card.title}` : ''} ·{' '}
                           {formatJalaliReadable(tx.jalaliDate)}
@@ -442,15 +474,18 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
                     </div>
                     <div className="text-left shrink-0 tabular-nums">
                       <span
-                        className={`text-sm font-extrabold ${
+                        className={`text-sm font-black ${
                           tx.type === 'expense'
                             ? 'text-rose-600 dark:text-rose-400'
-                            : 'text-emerald-600 dark:text-emerald-400'
+                            : tx.type === 'income'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-sky-600 dark:text-sky-400'
                         }`}
                       >
+                        {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
                         {formatMoney(tx.amount)}
                       </span>
-                      <span className="text-[10px] text-slate-400 block">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
                         {settings.currencyUnit}
                       </span>
                     </div>
@@ -604,7 +639,7 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
               تراکنشی در این دسته وجود ندارد.
             </p>
           ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="space-y-2.5">
               {activeFolder.items.map((tx) => {
                 const sub = activeFolder.category.subCategories.find(
                   (s) => s.id === tx.subCategoryId
@@ -612,23 +647,54 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
                 const card = cards.find((c) => c.id === tx.cardId);
                 const bank = card ? IRANIAN_BANKS[card.bankId] : null;
 
+                const txRowColorClass =
+                  tx.type === 'expense'
+                    ? 'bg-rose-50/85 hover:bg-rose-100/80 dark:bg-rose-950/30 dark:hover:bg-rose-950/45 border-rose-200/80 dark:border-rose-800/50 border-r-4 border-r-rose-500'
+                    : tx.type === 'income'
+                    ? 'bg-emerald-50/85 hover:bg-emerald-100/80 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/45 border-emerald-200/80 dark:border-emerald-800/50 border-r-4 border-r-emerald-500'
+                    : 'bg-sky-50/85 hover:bg-sky-100/80 dark:bg-sky-950/30 dark:hover:bg-sky-950/45 border-sky-200/80 dark:border-sky-800/50 border-r-4 border-r-sky-500';
+
+                const txBadgeClass =
+                  tx.type === 'expense'
+                    ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                    : tx.type === 'income'
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-sky-500/15 text-sky-700 dark:text-sky-300';
+
                 return (
                   <div
                     key={tx.id}
                     onClick={() => onEditTransaction(tx)}
-                    className="py-3.5 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 px-2 -mx-2 rounded-2xl cursor-pointer"
+                    className={`p-3.5 flex items-center justify-between gap-3 rounded-2xl border transition-all cursor-pointer ${txRowColorClass}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <CircularIcon
                         name={sub?.icon || activeFolder.category.icon}
-                        color={activeFolder.category.color}
+                        color={
+                          tx.type === 'expense'
+                            ? '#f43f5e'
+                            : tx.type === 'income'
+                            ? '#10b981'
+                            : '#0ea5e9'
+                        }
                         size="sm"
                       />
                       <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
-                          {tx.title}
-                        </h4>
-                        <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                            {tx.title}
+                          </h4>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-lg font-extrabold ${txBadgeClass}`}
+                          >
+                            {tx.type === 'expense'
+                              ? 'هزینه'
+                              : tx.type === 'income'
+                              ? 'درآمد'
+                              : 'کارت‌به‌کارت'}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
                           <span>{sub?.name || 'عمومی'}</span>
                           {card && (
                             <>
@@ -647,10 +713,19 @@ export const ArchiveView: React.FC<ArchiveViewProps> = ({ state, onEditTransacti
                     </div>
 
                     <div className="text-left shrink-0 tabular-nums">
-                      <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                      <span
+                        className={`text-sm font-black ${
+                          tx.type === 'expense'
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : tx.type === 'income'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-sky-600 dark:text-sky-400'
+                        }`}
+                      >
+                        {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
                         {formatMoney(tx.amount)}
                       </span>
-                      <span className="text-[10px] text-slate-400 block">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
                         {settings.currencyUnit}
                       </span>
                     </div>

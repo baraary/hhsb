@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Zap, ArrowLeftRight } from 'lucide-react';
+import { Zap, ArrowLeftRight, Trash2, Copy } from 'lucide-react';
 import {
   AppState,
   Transaction,
@@ -8,6 +8,7 @@ import {
 import {
   toEnglishDigits,
   formatMoney,
+  formatAmountToTomanWords,
   getCurrentTimeStr,
   getCurrentJalaliDateStr,
 } from '../utils/persian';
@@ -20,6 +21,7 @@ interface TransactionModalProps {
   onClose: () => void;
   state: AppState;
   onSave: (tx: Omit<Transaction, 'id' | 'createdAt'>, existingId?: string) => void;
+  onDelete?: (id: string) => void;
   editingTransaction?: Transaction | null;
 }
 
@@ -95,6 +97,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onClose,
   state,
   onSave,
+  onDelete,
   editingTransaction,
 }) => {
   const { categories, tags, cards, settings } = state;
@@ -485,9 +488,53 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 inputMode="numeric"
                 value={amountStr ? formatMoney(numericAmountPreview) : ''}
                 onChange={(e) => handleAmountChange(e.target.value)}
-                placeholder="مثلاً: ۱،۲۵۰،۰۰۰"
+                placeholder={
+                  settings.currencyUnit === 'ریال'
+                    ? 'مثلاً: ۱۲،۵۰۰،۰۰۰ ریال'
+                    : 'مثلاً: ۱،۲۵۰،۰۰۰ تومان'
+                }
                 className="w-full px-4 py-3 rounded-2xl bg-slate-100/80 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-sm font-bold tabular-nums text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
               />
+              {/* Live Persian Words Equivalent in Toman (همیشه به حروف و به تومان) */}
+              <div className="mt-1.5 min-h-[22px] flex items-center justify-between gap-2">
+                {numericAmountPreview > 0 ? (
+                  <p className="text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400 leading-relaxed">
+                    معادل به تومان:{' '}
+                    {formatAmountToTomanWords(
+                      numericAmountPreview,
+                      settings.currencyUnit
+                    )}
+                  </p>
+                ) : (
+                  <span className="text-[10px] text-slate-400">
+                    معادل حروفی مبلغ به تومان در این قسمت نمایش داده می‌شود
+                  </span>
+                )}
+                {numericAmountPreview > 0 && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setAmountStr((prev) => `${prev}0`)}
+                      className="px-2 py-0.5 rounded-lg bg-slate-200/80 dark:bg-slate-800 text-[10px] font-extrabold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-300"
+                      title="افزودن یک صفر (×۱۰)"
+                    >
+                      +۰
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAmountStr((prev) =>
+                          prev.length > 1 ? prev.slice(0, -1) : ''
+                        )
+                      }
+                      className="px-2 py-0.5 rounded-lg bg-slate-200/80 dark:bg-slate-800 text-[10px] font-extrabold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-300"
+                      title="حذف یک رقم از آخر (÷۱۰)"
+                    >
+                      -۰
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -758,8 +805,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             />
           </div>
 
-          {/* Submit Action */}
-          <div className="pt-2">
+          {/* Submit & Edit Actions */}
+          <div className="pt-2 space-y-2.5">
             <button
               type="submit"
               className="w-full py-3.5 rounded-2xl theme-gradient text-white font-extrabold text-sm shadow-lg hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer"
@@ -770,6 +817,52 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 ? 'ثبت انتقال وجه / برداشت نقد'
                 : 'ثبت نهایی در کیف پول'}
             </button>
+
+            {editingTransaction && (
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const activeUserId = state.userId || 'hootan';
+                    onSave({
+                      title: title.trim() || editingTransaction.title,
+                      amount: numericAmountPreview || editingTransaction.amount,
+                      type,
+                      categoryId: activeCategory?.id || categoryId,
+                      subCategoryId:
+                        subCategoryId || activeCategory?.subCategories[0]?.id || '',
+                      tags: selectedTags,
+                      spentBy: activeUserId,
+                      recordedBy: activeUserId,
+                      cardId,
+                      toCardId: type === 'transfer' ? toCardId : undefined,
+                      jalaliDate: getCurrentJalaliDateStr(),
+                      time: getCurrentTimeStr(),
+                      note: note.trim(),
+                    });
+                    onClose();
+                  }}
+                  className="py-2.5 px-3 rounded-2xl bg-sky-500/12 hover:bg-sky-500/20 border border-sky-500/30 text-sky-700 dark:text-sky-300 text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Copy size={14} />
+                  <span>تکرار این تراکنش برای امروز</span>
+                </button>
+
+                {onDelete && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDelete(editingTransaction.id);
+                      onClose();
+                    }}
+                    className="py-2.5 px-3 rounded-2xl bg-rose-500/12 hover:bg-rose-500/20 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 size={14} />
+                    <span>حذف تراکنش (با قابلیت بازگردانی)</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </form>
       </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shuffle, Check, Copy } from 'lucide-react';
+import { Shuffle, Check, Copy, Share2 } from 'lucide-react';
 import { BankCard, Transaction } from '../types';
 import { IRANIAN_BANKS, BankLogoVector, detectBankByText } from '../utils/iranianBanks';
 import {
@@ -7,13 +7,14 @@ import {
   resolveCardPattern,
   CardVectorPatternOverlay,
 } from '../utils/cardThemesAndPatterns';
-import { formatCardNumber, formatMoney, toPersianDigits } from '../utils/persian';
+import { formatCardNumber, formatMoney, toEnglishDigits, toPersianDigits } from '../utils/persian';
 import { CircularIcon } from './CircularIcon';
 
 interface BankCardVisualProps {
   card: BankCard;
   transactions: Transaction[];
   currencyUnit: string;
+  ownerName?: string;
   isMonochrome?: boolean;
   privacyMode?: boolean;
   onEdit?: (card: BankCard) => void;
@@ -25,13 +26,14 @@ export const BankCardVisual: React.FC<BankCardVisualProps> = ({
   card,
   transactions,
   currencyUnit,
+  ownerName,
   isMonochrome = false,
   privacyMode = false,
   onEdit,
   onRandomizeStyle,
   compact = false,
 }) => {
-  const [copied, setCopied] = useState<'card' | 'sheba' | null>(null);
+  const [copied, setCopied] = useState<'card' | 'sheba' | 'vcard' | null>(null);
   const titleBankId = detectBankByText(card.title || '');
   const effectiveBankId =
     card.bankId === 'mellat' && titleBankId && titleBankId !== 'mellat'
@@ -65,11 +67,44 @@ export const BankCardVisual: React.FC<BankCardVisualProps> = ({
     Boolean(card.cardColorTheme) && card.cardColorTheme !== 'auto';
   const useMonochromeSurface = isMonochrome && !hasExplicitCustomColor;
 
-  const handleCopy = (text: string, type: 'card' | 'sheba', e: React.MouseEvent) => {
+  const cleanCardDigits = toEnglishDigits(card.cardNumber || '').replace(/\D/g, '');
+  const rawSheba = (card.shebaNumber || '').trim();
+  const formattedSheba = rawSheba
+    ? rawSheba.toUpperCase().startsWith('IR')
+      ? rawSheba.toUpperCase()
+      : `IR${toEnglishDigits(rawSheba).replace(/\D/g, '')}`
+    : '';
+  const effectiveOwner = (card.owner || ownerName || '').trim();
+
+  const handleCopy = (
+    text: string,
+    type: 'card' | 'sheba' | 'vcard',
+    e: React.MouseEvent
+  ) => {
     e.stopPropagation();
     navigator.clipboard?.writeText(text);
     setCopied(type);
-    setTimeout(() => setCopied(null), 1800);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const handleCopyBankBusinessCard = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const lines: string[] = [
+      `مشخصات کارت بانکی (${bank.name}${
+        card.title && card.title !== bank.name ? ` - ${card.title}` : ''
+      })`,
+    ];
+    if (effectiveOwner) {
+      lines.push(`به نام: ${effectiveOwner}`);
+    }
+    lines.push(`شماره کارت:\n${cleanCardDigits}`);
+    if (formattedSheba) {
+      lines.push(`شماره شبا:\n${formattedSheba}`);
+    }
+    const vcardText = lines.join('\n');
+    navigator.clipboard?.writeText(vcardText);
+    setCopied('vcard');
+    setTimeout(() => setCopied(null), 2200);
   };
 
   const customStyle = useMonochromeSurface
@@ -172,10 +207,10 @@ export const BankCardVisual: React.FC<BankCardVisualProps> = ({
       </div>
 
       {/* Frosted Glass Card Number Row (LTR formatted) */}
-      <div className="relative z-10 mt-3">
+      <div className="relative z-10 mt-3 space-y-2">
         <div
           dir="ltr"
-          onClick={(e) => handleCopy(card.cardNumber, 'card', e)}
+          onClick={(e) => handleCopy(cleanCardDigits, 'card', e)}
           className="flex items-center justify-between bg-white/16 hover:bg-white/24 backdrop-blur-md rounded-2xl px-3.5 py-2 border border-white/30 shadow-inner cursor-pointer transition-colors"
         >
           <span className="font-sans text-xs sm:text-sm font-bold tracking-widest tabular-nums text-white drop-shadow-2xs">
@@ -195,29 +230,71 @@ export const BankCardVisual: React.FC<BankCardVisualProps> = ({
             )}
           </span>
         </div>
+
+        {/* 1-Tap Quick Copy Strip: Card Number + Sheba + Bank Business Card (کارت ویزیت بانکی) */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => handleCopy(cleanCardDigits, 'card', e)}
+            className="px-2.5 py-1.5 rounded-xl bg-black/20 hover:bg-black/30 backdrop-blur-md border border-white/20 text-[10px] font-extrabold text-white flex items-center gap-1 cursor-pointer transition-all"
+          >
+            {copied === 'card' ? <Check size={11} strokeWidth={2.5} /> : <Copy size={11} />}
+            <span>{copied === 'card' ? 'شماره کارت کپی شد' : 'کپی کارت'}</span>
+          </button>
+
+          {formattedSheba && (
+            <button
+              type="button"
+              onClick={(e) => handleCopy(formattedSheba, 'sheba', e)}
+              className="px-2.5 py-1.5 rounded-xl bg-black/20 hover:bg-black/30 backdrop-blur-md border border-white/20 text-[10px] font-extrabold text-white flex items-center gap-1 cursor-pointer transition-all"
+            >
+              {copied === 'sheba' ? <Check size={11} strokeWidth={2.5} /> : <Copy size={11} />}
+              <span>{copied === 'sheba' ? 'شبا کپی شد' : 'کپی شبا'}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleCopyBankBusinessCard}
+            className="flex-1 min-w-[130px] px-2.5 py-1.5 rounded-xl bg-white/22 hover:bg-white/32 backdrop-blur-md border border-white/35 text-[10px] font-extrabold text-white flex items-center justify-center gap-1 cursor-pointer transition-all shadow-2xs"
+          >
+            {copied === 'vcard' ? (
+              <>
+                <Check size={11} strokeWidth={2.6} />
+                <span>کارت ویزیت بانکی کپی شد</span>
+              </>
+            ) : (
+              <>
+                <Share2 size={11} strokeWidth={2.3} />
+                <span>کپی کارت ویزیت بانکی</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Bottom Metadata: Sheba + Expiry + Income/Expense summary */}
+      {/* Bottom Metadata: Owner + Expiry + Income/Expense summary */}
       {!compact && (
         <div className="relative z-10 mt-2.5 pt-2 border-t border-white/25 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/90">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            {effectiveOwner && (
+              <>
+                <span className="font-bold text-white truncate max-w-[110px]">
+                  {effectiveOwner}
+                </span>
+                <span className="text-white/50">·</span>
+              </>
+            )}
             <span>انقضا: {toPersianDigits(card.expiryDate || '06/05')}</span>
-            {card.shebaNumber && (
+            {formattedSheba && (
               <>
                 <span className="text-white/50">·</span>
                 <button
                   type="button"
-                  onClick={(e) => handleCopy(card.shebaNumber!, 'sheba', e)}
+                  onClick={(e) => handleCopy(formattedSheba, 'sheba', e)}
                   className="hover:text-white underline decoration-white/50 underline-offset-4 cursor-pointer tabular-nums flex items-center gap-1"
                 >
-                  {copied === 'sheba' ? (
-                    <>
-                      <Check size={11} strokeWidth={2.5} />
-                      <span>شبا کپی شد</span>
-                    </>
-                  ) : (
-                    <span>{card.shebaNumber.slice(0, 10)}...</span>
-                  )}
+                  <span>{formattedSheba.slice(0, 8)}...</span>
                 </button>
               </>
             )}

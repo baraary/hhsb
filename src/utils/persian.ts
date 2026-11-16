@@ -11,7 +11,7 @@ export function toEnglishDigits(value: string): string {
     .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
 }
 
-export function formatMoney(amount: number, showUnit = false, unit = 'تومان'): string {
+export function formatMoney(amount: number, showUnit = false, unit = 'ریال'): string {
   const formatted = Math.abs(Math.round(amount))
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, '،');
@@ -265,3 +265,127 @@ export function shiftJalaliDateByDays(jalaliDate: string, deltaDays: number): st
 
   return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
 }
+
+const PERSIAN_ONES = [
+  '',
+  'یک',
+  'دو',
+  'سه',
+  'چهار',
+  'پنج',
+  'شش',
+  'هفت',
+  'هشت',
+  'نه',
+];
+
+const PERSIAN_TEENS = [
+  'ده',
+  'یازده',
+  'دوازده',
+  'سیزده',
+  'چهارده',
+  'پانزده',
+  'شانزده',
+  'هفده',
+  'هجده',
+  'نوزده',
+];
+
+const PERSIAN_TENS = [
+  '',
+  '',
+  'بیست',
+  'سی',
+  'چهل',
+  'پنجاه',
+  'شصت',
+  'هفتاد',
+  'هشتاد',
+  'نود',
+];
+
+const PERSIAN_HUNDREDS = [
+  '',
+  'صد',
+  'دویست',
+  'سیصد',
+  'چهارصد',
+  'پانصد',
+  'ششصد',
+  'هفتصد',
+  'هشتصد',
+  'نهصد',
+];
+
+const PERSIAN_SCALES = ['', 'هزار', 'میلیون', 'میلیارد', 'هزار میلیارد'];
+
+function threeDigitsToPersianWords(n: number): string {
+  if (n <= 0) return '';
+  const parts: string[] = [];
+  const h = Math.floor(n / 100);
+  const rem = n % 100;
+  if (h > 0) {
+    parts.push(PERSIAN_HUNDREDS[h]);
+  }
+  if (rem >= 10 && rem <= 19) {
+    parts.push(PERSIAN_TEENS[rem - 10]);
+  } else {
+    const t = Math.floor(rem / 10);
+    const o = rem % 10;
+    if (t > 0) parts.push(PERSIAN_TENS[t]);
+    if (o > 0) parts.push(PERSIAN_ONES[o]);
+  }
+  return parts.join(' و ');
+}
+
+export function numberToPersianWords(num: number): string {
+  const clean = Math.floor(Math.abs(num));
+  if (!clean || isNaN(clean)) return '';
+  if (clean >= 1_000_000_000_000_000) return toPersianDigits(clean);
+
+  const chunks: string[] = [];
+  let remaining = clean;
+  let scaleIdx = 0;
+
+  while (remaining > 0 && scaleIdx < PERSIAN_SCALES.length) {
+    const group = remaining % 1000;
+    if (group > 0) {
+      const groupWords = threeDigitsToPersianWords(group);
+      const scaleLabel = PERSIAN_SCALES[scaleIdx];
+      chunks.unshift(scaleLabel ? `${groupWords} ${scaleLabel}` : groupWords);
+    }
+    remaining = Math.floor(remaining / 1000);
+    scaleIdx++;
+  }
+
+  return chunks.join(' و ');
+}
+
+/**
+ * Always returns the Persian word equivalent in TOMAN (تومان) underneath amount inputs,
+ * regardless of whether the app's active currencyUnit is 'ریال' or 'تومان'.
+ */
+export function formatAmountToTomanWords(
+  numericAmount: number,
+  currentUnit: 'تومان' | 'ریال' = 'ریال'
+): string {
+  if (!numericAmount || isNaN(numericAmount) || numericAmount <= 0) return '';
+  const clean = Math.floor(Math.abs(numericAmount));
+
+  if (currentUnit === 'ریال') {
+    const tomanVal = Math.floor(clean / 10);
+    const remRial = clean % 10;
+    if (tomanVal === 0) {
+      return `${numberToPersianWords(remRial)} ریال (کمتر از یک تومان)`;
+    }
+    const tomanWords = numberToPersianWords(tomanVal);
+    if (remRial > 0) {
+      return `${tomanWords} تومان و ${numberToPersianWords(remRial)} ریال`;
+    }
+    return `${tomanWords} تومان`;
+  }
+
+  return `${numberToPersianWords(clean)} تومان`;
+}
+

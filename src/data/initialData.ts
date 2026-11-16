@@ -150,16 +150,72 @@ export const INITIAL_CARDS: BankCard[] = [];
 export const INITIAL_TRANSACTIONS: Transaction[] = [];
 
 export const INITIAL_BUDGETS: BudgetGoal[] = [
-  { id: 'b_1', categoryId: 'cat_groceries', monthlyLimit: 8500000 },
-  { id: 'b_2', categoryId: 'cat_dining', monthlyLimit: 3500000 },
-  { id: 'b_3', categoryId: 'cat_home', monthlyLimit: 2500000 },
-  { id: 'b_4', categoryId: 'cat_transport', monthlyLimit: 2500000 },
-  { id: 'b_5', categoryId: 'cat_fashion', monthlyLimit: 4500000 },
-  { id: 'b_6', categoryId: 'cat_health', monthlyLimit: 2500000 },
-  { id: 'b_7', categoryId: 'cat_fun', monthlyLimit: 4000000 },
+  { id: 'b_1', categoryId: 'cat_groceries', monthlyLimit: 85000000 },
+  { id: 'b_2', categoryId: 'cat_dining', monthlyLimit: 35000000 },
+  { id: 'b_3', categoryId: 'cat_home', monthlyLimit: 25000000 },
+  { id: 'b_4', categoryId: 'cat_transport', monthlyLimit: 25000000 },
+  { id: 'b_5', categoryId: 'cat_fashion', monthlyLimit: 45000000 },
+  { id: 'b_6', categoryId: 'cat_health', monthlyLimit: 25000000 },
+  { id: 'b_7', categoryId: 'cat_fun', monthlyLimit: 40000000 },
 ];
 
 export const INITIAL_REMINDERS: DueReminder[] = [];
+
+export function scaleAppStateCurrency(
+  state: AppState,
+  targetUnit: 'تومان' | 'ریال'
+): AppState {
+  const currentUnit = state.settings?.currencyUnit || 'تومان';
+  if (currentUnit === targetUnit) {
+    return {
+      ...state,
+      settings: {
+        ...state.settings,
+        currencyUnit: targetUnit,
+        currencyMigratedToRial: true,
+      },
+    };
+  }
+
+  const factor = targetUnit === 'ریال' ? 10 : 0.1;
+  const scaleNum = (val: number | undefined): number =>
+    typeof val === 'number' && !isNaN(val) ? Math.round(val * factor) : 0;
+
+  return {
+    ...state,
+    transactions: (state.transactions || []).map((tx) => ({
+      ...tx,
+      amount: scaleNum(tx.amount),
+    })),
+    cards: (state.cards || []).map((c) => ({
+      ...c,
+      initialBalance: scaleNum(c.initialBalance),
+    })),
+    budgets: (state.budgets || []).map((b) => ({
+      ...b,
+      monthlyLimit: scaleNum(b.monthlyLimit),
+    })),
+    reminders: (state.reminders || []).map((r) => ({
+      ...r,
+      amount: scaleNum(r.amount),
+    })),
+    savingsGoals: (state.savingsGoals || []).map((g) => ({
+      ...g,
+      targetAmount: scaleNum(g.targetAmount),
+      savedAmount: scaleNum(g.savedAmount),
+    })),
+    settings: {
+      ...state.settings,
+      currencyUnit: targetUnit,
+      currencyMigratedToRial: true,
+      monthlyTotalBudget: scaleNum(state.settings?.monthlyTotalBudget),
+      initialCashBalance:
+        state.settings?.initialCashBalance !== undefined
+          ? scaleNum(state.settings.initialCashBalance)
+          : undefined,
+    },
+  };
+}
 
 export function createCleanUserState(
   userId: string,
@@ -185,12 +241,13 @@ export function createCleanUserState(
       hootanName: userName,
       fatemehName: '',
       sharedLabel: '',
-      currencyUnit: 'تومان',
+      currencyUnit: 'ریال',
+      currencyMigratedToRial: true,
       darkMode: true,
       themeMode: 'system',
       colorTheme,
       pinCode: '',
-      monthlyTotalBudget: 25000000,
+      monthlyTotalBudget: 250000000,
       githubSync: {
         enabled: true,
         repoOwner,

@@ -53,6 +53,7 @@ declare global {
       getRecentBankSms: (limit: number) => string; // JSON string of NativeAndroidSmsItem[]
       isBiometricSupported?: () => boolean;
       authenticateBiometric?: (reason: string) => void;
+      setSystemBarsColor?: (hexColor: string, darkIcons: boolean) => void;
     };
     onNativeBankSmsReceived?: (smsJson: string) => void;
     onNativeBiometricResult?: (success: boolean, errorMsg: string) => void;

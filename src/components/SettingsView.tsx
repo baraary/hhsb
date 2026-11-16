@@ -15,6 +15,8 @@ import {
   X,
   ArrowLeft,
   Trash2,
+  LayoutGrid,
+  GalleryHorizontalEnd,
 } from 'lucide-react';
 import {
   AppState,
@@ -28,7 +30,12 @@ import {
 } from '../types';
 import { CircularIcon, AVAILABLE_ICONS, IconName } from './CircularIcon';
 import { PWAInstallButton } from './PWAInstallButton';
-import { formatMoney, toEnglishDigits, toPersianDigits } from '../utils/persian';
+import {
+  formatMoney,
+  formatAmountToTomanWords,
+  toEnglishDigits,
+  toPersianDigits,
+} from '../utils/persian';
 import { createPartnerMagicLink, detectGitHubPagesRepo } from '../utils/githubSync';
 
 interface SettingsViewProps {
@@ -681,6 +688,76 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
               </div>
 
+              {/* Card Display Mode Selector (Moved from CardsView to Global Settings) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                  نحوه نمایش کارت‌های بانکی (در صفحه کارت‌ها):
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateSettings({ cardsViewMode: 'carousel' })}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      (settings.cardsViewMode || 'carousel') === 'carousel'
+                        ? 'theme-bg text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <GalleryHorizontalEnd size={15} strokeWidth={2.3} />
+                    <span>اسکرول افقی (ورق زدن)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateSettings({ cardsViewMode: 'grid' })}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      settings.cardsViewMode === 'grid'
+                        ? 'theme-bg text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <LayoutGrid size={15} strokeWidth={2.3} />
+                    <span>لیست عمودی / شبکه‌ای</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  تعیین کنید کارت‌های بانکی در تب «کارت‌ها» به‌صورت اسلایدر افقی قابل اسکرول نمایش داده شوند یا به‌صورت کارت‌های عمودی/شبکه‌ای زیر هم.
+                </p>
+              </div>
+
+              {/* Currency Unit Switcher: Rial (Default) vs Toman */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                  واحد پولی برنامه (پیش‌فرض: ریال):
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateSettings({ currencyUnit: 'ریال' })}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      settings.currencyUnit === 'ریال'
+                        ? 'theme-bg text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>ریال (پیش‌فرض بانکی)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateSettings({ currencyUnit: 'تومان' })}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      settings.currencyUnit === 'تومان'
+                        ? 'theme-bg text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>تومان</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  با تغییر بین «ریال» و «تومان»، تمامی مبالغ فعلی متناسب با واحد جدید تنظیم می‌شوند و در تمامی کادرهای ورود مبلغ، معادل حروفی همیشه به «تومان» نمایش داده می‌شود.
+                </p>
+              </div>
+
               {/* 10 Color Themes */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2.5">
@@ -771,6 +848,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       }}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums text-slate-900 dark:text-white"
                     />
+                    {settings.monthlyTotalBudget > 0 && (
+                      <p className="mt-1 text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400">
+                        معادل به تومان:{' '}
+                        {formatAmountToTomanWords(
+                          settings.monthlyTotalBudget,
+                          settings.currencyUnit
+                        )}
+                      </p>
+                    )}
                   </div>
                 </div>
 

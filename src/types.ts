@@ -212,6 +212,7 @@ export interface AppSettings {
   fatemehName: string; // Kept for backward compatibility
   sharedLabel: string; // Kept for backward compatibility
   currencyUnit: 'تومان' | 'ریال';
+  currencyMigratedToRial?: boolean;
   darkMode: boolean;
   themeMode?: ThemeMode;
   colorTheme: ColorThemeId;

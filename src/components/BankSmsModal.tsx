@@ -91,7 +91,8 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
 
   useEffect(() => {
     setIsAndroidBridgeAvailable(isAndroidApkWithSmsSupport());
-  }, [isOpen]);
+    setConvertRialToToman(settings.currencyUnit === 'تومان');
+  }, [isOpen, settings.currencyUnit]);
 
   useEffect(() => {
     if (initialRawSms && isOpen) {

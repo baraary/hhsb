@@ -13,6 +13,7 @@ import {
   Fingerprint,
   Eye,
   EyeOff,
+  RotateCcw,
 } from 'lucide-react';
 import {
   AppState,
@@ -27,6 +28,7 @@ import {
 import {
   DEFAULT_USERS,
   createCleanUserState,
+  scaleAppStateCurrency,
 } from './data/initialData';
 import { CircularIcon, IconName } from './components/CircularIcon';
 import { HomeView } from './components/HomeView';
@@ -160,7 +162,7 @@ function loadIsolatedUserState(user: UserAccount): AppState {
           autoRepo.repoName,
           recoveredOldToken
         );
-        return {
+        const mergedLocal: AppState = {
           ...baseClean,
           ...parsed,
           userId: user.id,
@@ -195,6 +197,13 @@ function loadIsolatedUserState(user: UserAccount): AppState {
             },
           },
         };
+        if (
+          !mergedLocal.settings.currencyMigratedToRial &&
+          mergedLocal.settings.currencyUnit === 'تومان'
+        ) {
+          return scaleAppStateCurrency(mergedLocal, 'ریال');
+        }
+        return mergedLocal;
       }
     }
   } catch {
@@ -314,6 +323,22 @@ export default function App() {
   const [initialBankSmsText, setInitialBankSmsText] = useState<string>('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [syncErrorMessage, setSyncErrorMessage] = useState<string>('');
+  const [undoToast, setUndoToast] = useState<{
+    label: string;
+    onUndo: () => void;
+  } | null>(null);
+  const undoTimerRef = useRef<number | null>(null);
+
+  const showUndoToast = useCallback((label: string, onUndo: () => void) => {
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current);
+    }
+    setUndoToast({ label, onUndo });
+    undoTimerRef.current = window.setTimeout(() => {
+      setUndoToast(null);
+      undoTimerRef.current = null;
+    }, 7000);
+  }, []);
 
   // CRITICAL SECURITY: Always start locked (false) when opening the link!
   // Nobody can see or enter any account without passing the Login/PIN gate first.
@@ -715,7 +740,7 @@ export default function App() {
 
           if (remoteUpdated > localUpdated || (localItemCount === 0 && remoteItemCount > 0)) {
             isApplyingRemoteRef.current = true;
-            return {
+            const rawMerged: AppState = {
               ...prev,
               ...remoteData,
               transactions: shouldProtectLocalData
@@ -757,6 +782,13 @@ export default function App() {
                 },
               },
             };
+            if (
+              !rawMerged.settings.currencyMigratedToRial &&
+              rawMerged.settings.currencyUnit === 'تومان'
+            ) {
+              return scaleAppStateCurrency(rawMerged, 'ریال');
+            }
+            return rawMerged;
           }
 
           // Even if localUpdated >= remoteUpdated, ALWAYS preserve remote PIN & recovered token!
@@ -1109,7 +1141,7 @@ export default function App() {
     return () => window.removeEventListener('focus', handleFocus);
   }, [state.settings.autoCheckClipboardSms, state.importedSmsHashes, state.transactions, isUnlocked]);
 
-  // Sync Dark Mode, Color Theme & Mobile Status Bar Theme-Color
+  // Sync Dark Mode, Color Theme & Mobile Status Bar / Android Navigation Bar Theme-Color
   useEffect(() => {
     const root = document.documentElement;
     const mode =
@@ -1117,36 +1149,68 @@ export default function App() {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const isMono = state.settings.colorTheme === 'monochrome';
 
-    const applyDarkClass = (isDark: boolean) => {
+    const applyThemeAndSystemBars = (isDark: boolean) => {
       if (isDark) {
         root.classList.add('dark');
       } else {
         root.classList.remove('dark');
       }
+
+      // When the app is locked (Lock Screen), the screen background is always dark (#020617).
+      // When unlocked, match the exact app background color:
+      // - Light mode: #fafafa (monochrome) or #f8fafc (slate-50)
+      // - Dark mode:  #09090b (monochrome) or #020617 (slate-950)
+      const effectiveDarkOnScreen = !isUnlocked ? true : isDark;
+      const activeBgHex = !isUnlocked
+        ? '#020617'
+        : isMono
+        ? effectiveDarkOnScreen
+          ? '#09090b'
+          : '#fafafa'
+        : effectiveDarkOnScreen
+        ? '#020617'
+        : '#f8fafc';
+
       const metaTheme = document.querySelector('meta[name="theme-color"]');
       if (metaTheme) {
-        if (isMono) {
-          metaTheme.setAttribute('content', isDark ? '#09090b' : '#fafafa');
-        } else {
-          metaTheme.setAttribute('content', isDark ? '#0f172a' : '#f8fafc');
-        }
+        metaTheme.setAttribute('content', activeBgHex);
+      }
+
+      root.style.backgroundColor = activeBgHex;
+      if (document.body) {
+        document.body.style.backgroundColor = activeBgHex;
+      }
+
+      // Sync Native Android Status Bar + Navigation Bar buttons background color & icon contrast
+      try {
+        window.AndroidSmsBridge?.setSystemBarsColor?.(
+          activeBgHex,
+          !effectiveDarkOnScreen
+        );
+      } catch {
+        // ignore if not inside Android APK WebView
       }
     };
 
     root.setAttribute('data-color-theme', state.settings.colorTheme || 'emerald');
 
     if (mode === 'system') {
-      applyDarkClass(mediaQuery.matches);
+      applyThemeAndSystemBars(mediaQuery.matches);
       const handleSystemChange = (e: MediaQueryListEvent) => {
-        applyDarkClass(e.matches);
+        applyThemeAndSystemBars(e.matches);
       };
       mediaQuery.addEventListener('change', handleSystemChange);
       return () => mediaQuery.removeEventListener('change', handleSystemChange);
     } else {
       const isDark = mode === 'dark';
-      applyDarkClass(isDark);
+      applyThemeAndSystemBars(isDark);
     }
-  }, [state.settings.themeMode, state.settings.darkMode, state.settings.colorTheme]);
+  }, [
+    state.settings.themeMode,
+    state.settings.darkMode,
+    state.settings.colorTheme,
+    isUnlocked,
+  ]);
 
   const handleTabChange = (newIndex: number) => {
     if (newIndex < 0 || newIndex >= TABS.length || newIndex === activeTabIndex) return;
@@ -1251,12 +1315,26 @@ export default function App() {
   };
 
   const handleDeleteTransaction = (id: string) => {
+    const deletedTx = stateRef.current.transactions.find((t) => t.id === id);
     hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
       transactions: prev.transactions.filter((t) => t.id !== id),
     }));
+    if (deletedTx) {
+      showUndoToast(`تراکنش «${deletedTx.title}» حذف شد`, () => {
+        hasUserEditedRef.current = true;
+        setState((prev) => ({
+          ...prev,
+          updatedAt: Date.now(),
+          transactions: [
+            deletedTx,
+            ...prev.transactions.filter((t) => t.id !== deletedTx.id),
+          ],
+        }));
+      });
+    }
   };
 
   const handleSaveCard = (cardData: Omit<BankCard, 'id'>, existingId?: string) => {
@@ -1284,12 +1362,26 @@ export default function App() {
   };
 
   const handleDeleteCard = (id: string) => {
+    const deletedCard = stateRef.current.cards.find((c) => c.id === id);
     hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
       cards: prev.cards.filter((c) => c.id !== id),
     }));
+    if (deletedCard) {
+      showUndoToast(`کارت بانکی «${deletedCard.title}» حذف شد`, () => {
+        hasUserEditedRef.current = true;
+        setState((prev) => ({
+          ...prev,
+          updatedAt: Date.now(),
+          cards: [
+            ...prev.cards.filter((c) => c.id !== deletedCard.id),
+            deletedCard,
+          ],
+        }));
+      });
+    }
   };
 
   const handleSaveCategory = (cat: Category) => {
@@ -1375,10 +1467,21 @@ export default function App() {
       );
     }
     setState((prev) => {
+      let baseState = prev;
+      if (
+        partial.currencyUnit &&
+        partial.currencyUnit !== prev.settings.currencyUnit
+      ) {
+        baseState = scaleAppStateCurrency(prev, partial.currencyUnit);
+      }
       const nextState: AppState = {
-        ...prev,
+        ...baseState,
         updatedAt: Date.now(),
-        settings: { ...prev.settings, ...partial },
+        settings: {
+          ...baseState.settings,
+          ...partial,
+          currencyMigratedToRial: true,
+        },
       };
       if (partial.pinCode) {
         pushStateToRemote(nextState);
@@ -1585,6 +1688,7 @@ export default function App() {
   };
 
   const handleDeleteReminder = (id: string) => {
+    const deletedRem = (stateRef.current.reminders || []).find((r) => r.id === id);
     hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
@@ -1594,6 +1698,22 @@ export default function App() {
         new Set([...(prev.dismissedReminderIds || []), id])
       ),
     }));
+    if (deletedRem) {
+      showUndoToast(`مورد «${deletedRem.title}» حذف شد`, () => {
+        hasUserEditedRef.current = true;
+        setState((prev) => ({
+          ...prev,
+          updatedAt: Date.now(),
+          reminders: [
+            deletedRem,
+            ...(prev.reminders || []).filter((r) => r.id !== deletedRem.id),
+          ],
+          dismissedReminderIds: (prev.dismissedReminderIds || []).filter(
+            (dId) => dId !== deletedRem.id
+          ),
+        }));
+      });
+    }
   };
 
   // Savings Goals (قلک‌ها و اهداف پس‌انداز) CRUD
@@ -1628,12 +1748,28 @@ export default function App() {
   };
 
   const handleDeleteSavingsGoal = (goalId: string) => {
+    const deletedGoal = (stateRef.current.savingsGoals || []).find(
+      (g) => g.id === goalId
+    );
     hasUserEditedRef.current = true;
     setState((prev) => ({
       ...prev,
       updatedAt: Date.now(),
       savingsGoals: (prev.savingsGoals || []).filter((g) => g.id !== goalId),
     }));
+    if (deletedGoal) {
+      showUndoToast(`هدف پس‌انداز «${deletedGoal.title}» حذف شد`, () => {
+        hasUserEditedRef.current = true;
+        setState((prev) => ({
+          ...prev,
+          updatedAt: Date.now(),
+          savingsGoals: [
+            ...(prev.savingsGoals || []).filter((g) => g.id !== deletedGoal.id),
+            deletedGoal,
+          ],
+        }));
+      });
+    }
   };
 
   const handleClearCurrentUserData = () => {
@@ -2596,6 +2732,55 @@ export default function App() {
         </AnimatePresence>
       </main>
 
+      {/* Floating Undo Delete Toast Bar */}
+      <AnimatePresence>
+        {undoToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="fixed bottom-20 left-4 right-4 z-50 pointer-events-none flex justify-center"
+          >
+            <div className="max-w-md w-full bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white border border-slate-700/80 rounded-2xl px-4 py-3 shadow-2xl flex items-center justify-between gap-3 pointer-events-auto">
+              <span className="text-xs font-bold text-slate-200 truncate">
+                {undoToast.label}
+              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    undoToast.onUndo();
+                    if (undoTimerRef.current !== null) {
+                      window.clearTimeout(undoTimerRef.current);
+                      undoTimerRef.current = null;
+                    }
+                    setUndoToast(null);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black cursor-pointer flex items-center gap-1.5 transition-all"
+                >
+                  <RotateCcw size={13} strokeWidth={2.5} />
+                  <span>بازگردانی حذف</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (undoTimerRef.current !== null) {
+                      window.clearTimeout(undoTimerRef.current);
+                      undoTimerRef.current = null;
+                    }
+                    setUndoToast(null);
+                  }}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white cursor-pointer"
+                  aria-label="بستن"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Bottom Navigation Bar */}
       <div className="fixed bottom-4 left-0 right-0 z-40 px-4 pointer-events-none">
         <nav
@@ -2743,6 +2928,7 @@ export default function App() {
           }}
           state={state}
           onSave={handleSaveTransaction}
+          onDelete={handleDeleteTransaction}
           editingTransaction={editingTx}
         />
 

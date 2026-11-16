@@ -8,8 +8,6 @@ import {
   Check,
   Banknote,
   ListFilter,
-  LayoutGrid,
-  GalleryHorizontalEnd,
   ChevronRight,
   ChevronLeft,
 } from 'lucide-react';
@@ -36,6 +34,7 @@ import {
 } from '../utils/cardThemesAndPatterns';
 import {
   formatMoney,
+  formatAmountToTomanWords,
   formatJalaliReadable,
   toEnglishDigits,
   toPersianDigits,
@@ -63,33 +62,13 @@ export const CardsView: React.FC<CardsViewProps> = ({
   const isPrivacy = Boolean(settings.privacyMode);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<BankCard | null>(null);
-  const [cardDisplayMode, setCardDisplayMode] = useState<'carousel' | 'grid'>(
-    () => settings.cardsViewMode || 'carousel'
-  );
+  const cardDisplayMode: 'carousel' | 'grid' = settings.cardsViewMode || 'carousel';
   const [activeCarouselIdx, setActiveCarouselIdx] = useState<number>(0);
 
   const carouselTrackRef = useRef<HTMLDivElement | null>(null);
   const cardItemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const wheelCooldownRef = useRef<number>(0);
   const isProgrammaticScrollRef = useRef<boolean>(false);
-
-  useEffect(() => {
-    if (settings.cardsViewMode && settings.cardsViewMode !== cardDisplayMode) {
-      setCardDisplayMode(settings.cardsViewMode);
-    }
-  }, [settings.cardsViewMode]);
-
-  const handleSelectDisplayMode = (mode: 'carousel' | 'grid') => {
-    setCardDisplayMode(mode);
-    if (onChangeCardsViewMode) {
-      onChangeCardsViewMode(mode);
-    }
-    if (mode === 'grid') {
-      setSelectedSourceId('all');
-    } else if (cards[activeCarouselIdx]) {
-      setSelectedSourceId(cards[activeCarouselIdx].id);
-    }
-  };
 
   const scrollToCardIndex = useCallback(
     (targetIdx: number) => {
@@ -180,6 +159,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
   const [cardNumber, setCardNumber] = useState('');
   const [bankId, setBankId] = useState<IranianBankId>('mellat');
   const [shebaNumber, setShebaNumber] = useState('');
+  const [owner, setOwner] = useState('');
   const [initialBalanceStr, setInitialBalanceStr] = useState('0');
   const [expiryDate, setExpiryDate] = useState('06/05');
   const [cardColorTheme, setCardColorTheme] = useState<CardColorThemeId>('auto');
@@ -193,6 +173,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
     setCardNumber('');
     setBankId('mellat');
     setShebaNumber('');
+    setOwner(settings.userName || '');
     setInitialBalanceStr('0');
     setExpiryDate('06/05');
     setCardColorTheme('auto');
@@ -207,6 +188,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
     setCardNumber(card.cardNumber);
     setBankId(card.bankId);
     setShebaNumber(card.shebaNumber || '');
+    setOwner(card.owner || settings.userName || '');
     setInitialBalanceStr(String(card.initialBalance));
     setExpiryDate(card.expiryDate);
     setCardColorTheme(card.cardColorTheme || 'auto');
@@ -223,6 +205,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
         bankId: card.bankId,
         cardNumber: card.cardNumber,
         shebaNumber: card.shebaNumber,
+        owner: card.owner,
         initialBalance: card.initialBalance,
         expiryDate: card.expiryDate,
         isDefault: card.isDefault,
@@ -286,6 +269,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
         bankId: resolvedBankId,
         cardNumber: finalCardNumber,
         shebaNumber: shebaNumber.trim() || undefined,
+        owner: owner.trim() || settings.userName || undefined,
         initialBalance: parseInt(
           toEnglishDigits(initialBalanceStr).replace(/\D/g, '') || '0',
           10
@@ -309,6 +293,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
       '•'
     ),
     shebaNumber: shebaNumber.trim() || undefined,
+    owner: owner.trim() || settings.userName || undefined,
     initialBalance: parseInt(
       toEnglishDigits(initialBalanceStr).replace(/\D/g, '') || '0',
       10
@@ -583,6 +568,15 @@ export const CardsView: React.FC<CardsViewProps> = ({
                       }
                       className="w-full px-4 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums text-slate-900 dark:text-white"
                     />
+                    {parseInt(toEnglishDigits(initialBalanceStr).replace(/\D/g, '') || '0', 10) > 0 && (
+                      <p className="mt-1 text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400">
+                        معادل به تومان:{' '}
+                        {formatAmountToTomanWords(
+                          parseInt(toEnglishDigits(initialBalanceStr).replace(/\D/g, '') || '0', 10),
+                          settings.currencyUnit
+                        )}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -600,18 +594,33 @@ export const CardsView: React.FC<CardsViewProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    شماره شبا (اختیاری - برای کپی سریع)
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={shebaNumber}
-                    onChange={(e) => setShebaNumber(e.target.value.toUpperCase())}
-                    placeholder="IR420120000000007845128904"
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-sans tabular-nums text-xs text-slate-900 dark:text-white"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      نام صاحب کارت (جهت درج در کارت ویزیت بانکی)
+                    </label>
+                    <input
+                      type="text"
+                      value={owner}
+                      onChange={(e) => setOwner(e.target.value)}
+                      placeholder={`مثلاً: ${settings.userName || 'هوتن براری'}`}
+                      className="w-full px-4 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      شماره شبا (اختیاری - برای کپی سریع)
+                    </label>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={shebaNumber}
+                      onChange={(e) => setShebaNumber(e.target.value.toUpperCase())}
+                      placeholder="IR420120000000007845128904"
+                      className="w-full px-4 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-sans tabular-nums text-xs text-slate-900 dark:text-white"
+                    />
+                  </div>
                 </div>
 
                 <button
@@ -691,35 +700,6 @@ export const CardsView: React.FC<CardsViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* View Mode Toggle: Carousel Stack vs Grid */}
-          {cards.length > 0 && (
-            <div className="flex items-center gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800">
-              <button
-                type="button"
-                onClick={() => handleSelectDisplayMode('carousel')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer flex items-center gap-1.5 transition-all ${
-                  cardDisplayMode === 'carousel'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
-                    : 'text-slate-500 dark:text-slate-400'
-                }`}
-              >
-                <GalleryHorizontalEnd size={14} />
-                <span>مدل فعلی (اسلایدر اسکرول‌پذیر)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectDisplayMode('grid')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer flex items-center gap-1.5 transition-all ${
-                  cardDisplayMode === 'grid'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
-                    : 'text-slate-500 dark:text-slate-400'
-                }`}
-              >
-                <LayoutGrid size={14} />
-                <span>مدل قبلی (نمایش شبکه‌ای)</span>
-              </button>
-            </div>
-          )}
 
           <button
             type="button"
@@ -879,51 +859,20 @@ export const CardsView: React.FC<CardsViewProps> = ({
                 </button>
               </div>
             </div>
+            {parseInt(toEnglishDigits(cashInputStr).replace(/\D/g, '') || '0', 10) > 0 && (
+              <p className="text-[11px] font-extrabold text-emerald-200">
+                معادل به تومان:{' '}
+                {formatAmountToTomanWords(
+                  parseInt(toEnglishDigits(cashInputStr).replace(/\D/g, '') || '0', 10),
+                  settings.currencyUnit
+                )}
+              </p>
+            )}
           </form>
         )}
       </div>
 
-      {/* Dedicated Display Model Switcher Bar right above Bank Cards */}
-      {cards.length > 0 && (
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-extrabold text-slate-700 dark:text-slate-200">
-            <span>انتخاب نحوه نمایش کارت‌های بانکی:</span>
-            <span className="text-[11px] font-medium text-slate-400">
-              (انتخاب شما ذخیره می‌شود)
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800">
-            <button
-              type="button"
-              onClick={() => handleSelectDisplayMode('carousel')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold cursor-pointer flex items-center justify-center gap-2 transition-all ${
-                cardDisplayMode === 'carousel'
-                  ? 'theme-bg text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <GalleryHorizontalEnd size={15} />
-              <span>مدل فعلی (اسکرول و ورق زدن کارت‌ها)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSelectDisplayMode('grid')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold cursor-pointer flex items-center justify-center gap-2 transition-all ${
-                cardDisplayMode === 'grid'
-                  ? 'theme-bg text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <LayoutGrid size={15} />
-              <span>مدل قبلی (نمایش شبکه‌ای همه کارت‌ها)</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Bank Cards: Scrollable Carousel Mode OR Classic Grid Mode */}
+      {/* Bank Cards: Scrollable Carousel Mode OR Classic Grid Mode (configured in Settings) */}
       {cards.length === 0 ? (
         <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-10 text-center space-y-3">
           <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
@@ -1016,6 +965,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
                           card={c}
                           transactions={transactions}
                           currencyUnit={settings.currencyUnit}
+                          ownerName={settings.userName}
                           isMonochrome={settings.colorTheme === 'monochrome'}
                           privacyMode={isPrivacy}
                           onEdit={openEditModal}
@@ -1133,6 +1083,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
                   card={card}
                   transactions={transactions}
                   currencyUnit={settings.currencyUnit}
+                  ownerName={settings.userName}
                   isMonochrome={settings.colorTheme === 'monochrome'}
                   privacyMode={isPrivacy}
                   onEdit={openEditModal}
@@ -1261,34 +1212,65 @@ export const CardsView: React.FC<CardsViewProps> = ({
             هیچ تراکنشی برای این حساب ثبت نشده است.
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="space-y-2.5">
             {sourceTransactions.map((tx) => {
               const cat = categories.find((c) => c.id === tx.categoryId);
               const sub = cat?.subCategories.find((s) => s.id === tx.subCategoryId);
               const isCash = tx.cardId === 'cash';
               const cardObj = cards.find((c) => c.id === tx.cardId);
 
+              const txRowColorClass =
+                tx.type === 'expense'
+                  ? 'bg-rose-50/85 hover:bg-rose-100/80 dark:bg-rose-950/30 dark:hover:bg-rose-950/45 border-rose-200/80 dark:border-rose-800/50 border-r-4 border-r-rose-500'
+                  : tx.type === 'income'
+                  ? 'bg-emerald-50/85 hover:bg-emerald-100/80 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/45 border-emerald-200/80 dark:border-emerald-800/50 border-r-4 border-r-emerald-500'
+                  : 'bg-sky-50/85 hover:bg-sky-100/80 dark:bg-sky-950/30 dark:hover:bg-sky-950/45 border-sky-200/80 dark:border-sky-800/50 border-r-4 border-r-sky-500';
+
+              const txBadgeClass =
+                tx.type === 'expense'
+                  ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                  : tx.type === 'income'
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-sky-500/15 text-sky-700 dark:text-sky-300';
+
               return (
                 <div
                   key={tx.id}
                   onClick={() => onEditTransaction && onEditTransaction(tx)}
-                  className="py-3 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 px-2 -mx-2 rounded-xl cursor-pointer"
+                  className={`p-3.5 flex items-center justify-between gap-3 rounded-2xl border transition-all cursor-pointer ${txRowColorClass}`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <CircularIcon
                       name={cat?.icon || 'layers'}
-                      color={cat?.color || '#10b981'}
+                      color={
+                        tx.type === 'expense'
+                          ? '#f43f5e'
+                          : tx.type === 'income'
+                          ? '#10b981'
+                          : '#0ea5e9'
+                      }
                       size="sm"
                     />
                     <div className="min-w-0">
-                      <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
-                        {tx.title}
-                      </h4>
-                      <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                          {tx.title}
+                        </h4>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-lg font-extrabold ${txBadgeClass}`}
+                        >
+                          {tx.type === 'expense'
+                            ? 'هزینه'
+                            : tx.type === 'income'
+                            ? 'درآمد'
+                            : 'کارت‌به‌کارت'}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 tabular-nums">
                         <span>{cat?.name || 'سایر'}</span>
                         {sub && <span>· {sub.name}</span>}
                         <span>·</span>
-                        <span className="font-bold text-slate-700 dark:text-slate-300">
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
                           {isCash ? 'موجودی نقدی' : cardObj?.title || 'کارت بانکی'}
                         </span>
                         <span>·</span>
@@ -1304,13 +1286,15 @@ export const CardsView: React.FC<CardsViewProps> = ({
                       className={`text-xs sm:text-sm font-black ${
                         tx.type === 'expense'
                           ? 'text-rose-600 dark:text-rose-400'
-                          : 'text-emerald-600 dark:text-emerald-400'
+                          : tx.type === 'income'
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-sky-600 dark:text-sky-400'
                       }`}
                     >
-                      {tx.type === 'expense' ? '-' : '+'}
+                      {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
                       {formatMoney(tx.amount)}
                     </div>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
                       {settings.currencyUnit}
                     </span>
                   </div>
