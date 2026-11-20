@@ -278,11 +278,35 @@ import org.json.JSONObject;
 public class BankSmsReceiver extends BroadcastReceiver {
     public static final String PREFS_NAME = "hamhesab_native_prefs";
     public static final String KEY_PENDING_SMS = "pending_bank_sms_queue";
+    public static final String KEY_BG_SMS_ENABLED = "bg_sms_enabled";
     public static final String CHANNEL_ID = "hamhesab_bank_sms_channel";
     public static final String EXTRA_PENDING_SMS_JSON = "extra_pending_sms_json";
 
+    public static boolean isBackgroundSmsEnabled(Context context) {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            return prefs.getBoolean(KEY_BG_SMS_ENABLED, true);
+        } catch (Exception ignored) {
+            return true;
+        }
+    }
+
     public static boolean isLikelyIranianBankSms(String body) {
         if (body == null || body.trim().length() < 8) return false;
+        // Exclude OTPs, future-tense notices, and failed transaction alerts
+        if (
+            body.contains("رمز پویا") ||
+            body.contains("رمز دوم") ||
+            body.contains("کد تایید") ||
+            body.contains("کد تائید") ||
+            body.contains("کسر خواهد شد") ||
+            body.contains("تمدید خواهد شد") ||
+            body.contains("بسته پیامک") ||
+            body.contains("سررسید قسط") ||
+            body.contains("تراکنش ناموفق")
+        ) {
+            return false;
+        }
         return body.contains("برداشت") ||
             body.contains("واریز") ||
             body.contains("واريز") ||
@@ -301,6 +325,9 @@ public class BankSmsReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         if (intent == null || !"android.provider.Telephony.SMS_RECEIVED".equals(intent.getAction())) {
+            return;
+        }
+        if (!isBackgroundSmsEnabled(context)) {
             return;
         }
         try {
@@ -907,6 +934,26 @@ public class MainActivity extends Activity {
                     NOTIF_PERMISSION_REQ_CODE
                 );
             }
+        }
+
+        @JavascriptInterface
+        public void setBackgroundSmsEnabled(final boolean enabled) {
+            try {
+                SharedPreferences prefs = getSharedPreferences(BankSmsReceiver.PREFS_NAME, Context.MODE_PRIVATE);
+                SharedPreferences.Editor editor = prefs.edit();
+                editor.putBoolean(BankSmsReceiver.KEY_BG_SMS_ENABLED, enabled);
+                if (!enabled) {
+                    editor.putString(BankSmsReceiver.KEY_PENDING_SMS, "[]");
+                    pendingSingleSmsJson = "";
+                }
+                editor.apply();
+            } catch (Exception ignored) {
+            }
+        }
+
+        @JavascriptInterface
+        public boolean isBackgroundSmsEnabled() {
+            return BankSmsReceiver.isBackgroundSmsEnabled(MainActivity.this);
         }
 
         @JavascriptInterface

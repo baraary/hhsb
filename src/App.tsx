@@ -52,6 +52,7 @@ import {
   isLikelyBankSms,
   computeSmsHash,
   consumePendingNativeBankSms,
+  setAndroidBackgroundSmsEnabled,
   triggerNativeHaptic,
   NativeAndroidSmsItem,
 } from './utils/bankSmsParser';
@@ -1121,10 +1122,31 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [state, pushStateToRemote]);
 
+  // Keep Native Android Background SMS Receiver in sync with user setting
+  const isAutoBgSmsEnabled = state.settings.autoReadBackgroundBankSms !== false;
+
+  useEffect(() => {
+    setAndroidBackgroundSmsEnabled(isAutoBgSmsEnabled);
+    if (!isAutoBgSmsEnabled) {
+      setPendingBackgroundSmsText('');
+    }
+  }, [isAutoBgSmsEnabled]);
+
   // Listen for Native Android APK incoming Bank SMS, Background Queue, Widget Quick Actions & Smart Back Button
   useEffect(() => {
+    const isHashAlreadyHandled = (bodyText: string): boolean => {
+      const hash = computeSmsHash(bodyText);
+      const snap = stateRef.current;
+      return (
+        (snap.importedSmsHashes || []).includes(hash) ||
+        (snap.dismissedSmsHashes || []).includes(hash) ||
+        (snap.transactions || []).some((t) => t.smsHash === hash)
+      );
+    };
+
     const queueOrOpenSms = (bodyText: string) => {
       if (!bodyText || !bodyText.trim()) return;
+      if (!isAutoBgSmsEnabled) return;
       if (isUnlocked) {
         setInitialBankSmsText(bodyText);
         setIsBankSmsModalOpen(true);
@@ -1136,9 +1158,14 @@ export default function App() {
     };
 
     window.onNativeBankSmsReceived = (smsJson: string) => {
+      if (!isAutoBgSmsEnabled) return;
       try {
         const item: NativeAndroidSmsItem = JSON.parse(smsJson);
-        if (item?.body && isLikelyBankSms(item.body, item.address)) {
+        if (
+          item?.body &&
+          isLikelyBankSms(item.body, item.address) &&
+          !isHashAlreadyHandled(item.body)
+        ) {
           queueOrOpenSms(item.body);
         }
       } catch {
@@ -1162,13 +1189,19 @@ export default function App() {
       }
     };
 
-    // Consume any pending SMS or widget quick action stored while app was closed/backgrounded
-    const pendingList = consumePendingNativeBankSms().filter(
-      (item) => item?.body && isLikelyBankSms(item.body, item.address)
-    );
-    if (pendingList.length > 0) {
-      const combined = pendingList.map((i) => i.body).join('\n---\n');
-      queueOrOpenSms(combined);
+    // Consume any pending SMS stored while app was closed/backgrounded (only open if auto background SMS is enabled)
+    const rawPendingList = consumePendingNativeBankSms();
+    if (isAutoBgSmsEnabled) {
+      const pendingList = rawPendingList.filter(
+        (item) =>
+          item?.body &&
+          isLikelyBankSms(item.body, item.address) &&
+          !isHashAlreadyHandled(item.body)
+      );
+      if (pendingList.length > 0) {
+        const combined = pendingList.map((i) => i.body).join('\n---\n');
+        queueOrOpenSms(combined);
+      }
     }
 
     try {
@@ -1184,7 +1217,7 @@ export default function App() {
       window.onNativeBankSmsReceived = undefined;
       window.onNativeQuickAction = undefined;
     };
-  }, [isUnlocked]);
+  }, [isUnlocked, isAutoBgSmsEnabled]);
 
   // Execute any queued background SMS or Widget Quick Action immediately after unlocking
   useEffect(() => {

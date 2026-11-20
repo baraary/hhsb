@@ -226,6 +226,7 @@ export interface AppSettings {
   monthlyTotalBudget: number; // Personal monthly total budget
   initialCashBalance?: number; // Base cash wallet balance (موجودی نقدی اولیه)
   autoCheckClipboardSms?: boolean;
+  autoReadBackgroundBankSms?: boolean; // Enable/disable automatic background reading of bank SMS (default true)
   githubSync?: GitHubSyncConfig;
 }
 

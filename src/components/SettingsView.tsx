@@ -49,8 +49,11 @@ import {
 import { createPartnerMagicLink, detectGitHubPagesRepo } from '../utils/githubSync';
 import {
   isAndroidApkWithSmsSupport,
+  hasAndroidSmsPermission,
+  requestAndroidSmsPermission,
   hasAndroidNotificationPermission,
   requestAndroidNotificationPermission,
+  setAndroidBackgroundSmsEnabled,
 } from '../utils/bankSmsParser';
 
 export type SettingsSectionId =
@@ -58,6 +61,7 @@ export type SettingsSectionId =
   | 'account'
   | 'security'
   | 'appearance'
+  | 'sms'
   | 'app'
   | 'categories'
   | 'tags'
@@ -133,10 +137,17 @@ const SECTION_META: Record<Exclude<SettingsSectionId, 'hub'>, SectionMeta> = {
     icon: 'sparkles',
     color: '#0ea5e9',
   },
+  sms: {
+    id: 'sms',
+    title: 'پیامک‌های بانکی و خواندن خودکار',
+    description: 'کنترل خواندن خودکار پیامک در پس‌زمینه و تشخیص از کلیپ‌بورد',
+    icon: 'bell',
+    color: '#f97316',
+  },
   app: {
     id: 'app',
     title: 'نصب و امکانات اپلیکیشن',
-    description: 'نسخه اندروید، ویجت، اعلان پیامک و نصب روی گوشی',
+    description: 'نسخه اندروید، ویجت و نصب روی گوشی',
     icon: 'smartphone',
     color: '#14b8a6',
   },
@@ -621,11 +632,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               `${themeModeLabel} · تم ${currentColorThemeName} · واحد ${settings.currencyUnit}`
             )}
             {renderHubRow(
+              'sms',
+              `پس‌زمینه: ${
+                settings.autoReadBackgroundBankSms !== false ? 'فعال' : 'غیرفعال'
+              } · کلیپ‌بورد: ${settings.autoCheckClipboardSms ? 'فعال' : 'غیرفعال'}`
+            )}
+            {renderHubRow(
               'app',
               isAndroidApk
                 ? `نسخه اندروید ${toPersianDigits(
                     window.AndroidSmsBridge?.getNativeAppVersion?.() || '5.0'
-                  )} · ویجت و اعلان پس‌زمینه`
+                  )} · ویجت و کش برنامه`
                 : 'نصب اپلیکیشن اندروید و افزودن به صفحه اصلی'
             )}
           </div>
@@ -1228,7 +1245,131 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       )}
 
       {/* =================================================================== */}
-      {/* SUB-PAGE 4: APP INSTALL & NATIVE ANDROID CAPABILITIES               */}
+      {/* SUB-PAGE 4: BANK SMS & BACKGROUND AUTO-READ SETTINGS                */}
+      {/* =================================================================== */}
+      {activeSection === 'sms' && (
+        <div className="space-y-5">
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800/80">
+            {/* Toggle 1: Background Auto-Read Bank SMS */}
+            <div className="p-5 flex items-center justify-between gap-4">
+              <div className="min-w-0 flex-1 space-y-1">
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  خواندن خودکار پیامک بانکی در پس‌زمینه
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  با فعال بودن این گزینه، پیامک‌های جدید بانکی حتی هنگام بسته بودن اپلیکیشن به‌صورت خودکار تشخیص داده شده و اعلان ثبت سریع نمایش داده می‌شود. در صورت غیرفعال کردن، فقط با زدن دکمه «خواندن پیامک بانکی» به‌صورت دستی پیامک‌ها بررسی می‌شوند.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.autoReadBackgroundBankSms !== false}
+                onClick={() => {
+                  const nextEnabled = settings.autoReadBackgroundBankSms === false;
+                  setAndroidBackgroundSmsEnabled(nextEnabled);
+                  onUpdateSettings({ autoReadBackgroundBankSms: nextEnabled });
+                }}
+                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full p-1 transition-colors cursor-pointer ${
+                  settings.autoReadBackgroundBankSms !== false
+                    ? 'theme-bg'
+                    : 'bg-slate-300 dark:bg-slate-700'
+                }`}
+                aria-label="تغییر وضعیت خواندن خودکار پیامک بانکی در پس‌زمینه"
+              >
+                <span
+                  className={`inline-block h-6 w-6 rounded-full bg-white shadow-sm transition-transform ${
+                    settings.autoReadBackgroundBankSms !== false
+                      ? '-translate-x-6'
+                      : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Toggle 2: Auto-Check Clipboard for Bank SMS */}
+            <div className="p-5 flex items-center justify-between gap-4">
+              <div className="min-w-0 flex-1 space-y-1">
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  تشخیص خودکار پیامک کپی‌شده از کلیپ‌بورد
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  اگر متن یک پیامک بانکی را کپی کنید و وارد برنامه شوید، پنجره ثبت سریع تراکنش به‌صورت خودکار باز می‌شود.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={Boolean(settings.autoCheckClipboardSms)}
+                onClick={() =>
+                  onUpdateSettings({
+                    autoCheckClipboardSms: !settings.autoCheckClipboardSms,
+                  })
+                }
+                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full p-1 transition-colors cursor-pointer ${
+                  settings.autoCheckClipboardSms
+                    ? 'theme-bg'
+                    : 'bg-slate-300 dark:bg-slate-700'
+                }`}
+                aria-label="تغییر وضعیت تشخیص خودکار پیامک از کلیپ‌بورد"
+              >
+                <span
+                  className={`inline-block h-6 w-6 rounded-full bg-white shadow-sm transition-transform ${
+                    settings.autoCheckClipboardSms ? '-translate-x-6' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Native Android Permissions Status Card (when inside APK) */}
+          {isAndroidApk && (
+            <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-5 space-y-3">
+              <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                دسترسی‌های سیستم اندروید برای پیامک بانکی
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                برای عملکرد دقیق خواندن خودکار در پس‌زمینه، دسترسی «پیامک‌ها» و «اعلان‌ها» باید در اندروید تایید شده باشند.
+              </p>
+              <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                {!hasAndroidSmsPermission() ? (
+                  <button
+                    type="button"
+                    onClick={() => requestAndroidSmsPermission()}
+                    className="min-h-[42px] px-4 py-2 rounded-2xl theme-bg text-white text-xs font-extrabold cursor-pointer"
+                  >
+                    تایید مجوز دسترسی به پیامک‌ها
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    <Check size={14} strokeWidth={2.5} />
+                    <span>مجوز خواندن پیامک فعال است</span>
+                  </span>
+                )}
+
+                {!hasAndroidNotificationPermission() ? (
+                  <button
+                    type="button"
+                    onClick={() => requestAndroidNotificationPermission()}
+                    className="min-h-[42px] px-4 py-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-700 dark:text-emerald-300 text-xs font-extrabold cursor-pointer"
+                  >
+                    فعال‌سازی مجوز اعلان پس‌زمینه
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    <Check size={14} strokeWidth={2.5} />
+                    <span>مجوز اعلان‌ها فعال است</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* SUB-PAGE 5: APP INSTALL & NATIVE ANDROID CAPABILITIES               */}
       {/* =================================================================== */}
       {activeSection === 'app' && (
         <div className="space-y-5">

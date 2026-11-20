@@ -57,6 +57,8 @@ declare global {
       isSystemDarkMode?: () => boolean;
       hasNotificationPermission?: () => boolean;
       requestNotificationPermission?: () => void;
+      setBackgroundSmsEnabled?: (enabled: boolean) => void;
+      isBackgroundSmsEnabled?: () => boolean;
       consumePendingBankSms?: () => string;
       consumePendingQuickAction?: () => string;
       updateWidgetData?: (
@@ -650,6 +652,25 @@ export function consumePendingNativeBankSms(): NativeAndroidSmsItem[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+export function setAndroidBackgroundSmsEnabled(enabled: boolean): void {
+  try {
+    window.AndroidSmsBridge?.setBackgroundSmsEnabled?.(Boolean(enabled));
+  } catch {
+    // ignore outside Android APK
+  }
+}
+
+export function getAndroidBackgroundSmsEnabled(): boolean {
+  try {
+    if (typeof window.AndroidSmsBridge?.isBackgroundSmsEnabled === 'function') {
+      return Boolean(window.AndroidSmsBridge.isBackgroundSmsEnabled());
+    }
+    return true;
+  } catch {
+    return true;
   }
 }
 
