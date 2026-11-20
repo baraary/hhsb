@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
-echo "=== Building Enhanced Hybrid-Native Signed Android APK (hamhesab.apk v5.0) ==="
+RUN_NUM="${GITHUB_RUN_NUMBER:-1}"
+VERSION_CODE="${APK_VERSION_CODE:-$((100 + RUN_NUM))}"
+VERSION_NAME="${APK_VERSION_NAME:-5.${RUN_NUM}}"
+
+echo "=== Building Enhanced Hybrid-Native Signed Android APK (hamhesab.apk v${VERSION_NAME}, versionCode=${VERSION_CODE}) ==="
 
 DIST_DIR="$(pwd)/dist"
 WORK_DIR="$(pwd)/.apk-build"
@@ -194,12 +198,12 @@ cat > "$WORK_DIR/res/xml/hamhesab_widget_info.xml" << 'EOF'
 EOF
 
 # Create AndroidManifest.xml
-cat > "$WORK_DIR/AndroidManifest.xml" << 'EOF'
+cat > "$WORK_DIR/AndroidManifest.xml" << EOF
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="ir.hamhesab.app"
-    android:versionCode="6"
-    android:versionName="5.0">
+    android:versionCode="${VERSION_CODE}"
+    android:versionName="${VERSION_NAME}">
 
     <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="34" />
 
@@ -1432,27 +1436,53 @@ cp "$WORK_DIR/dex/classes.dex" "$WORK_DIR/classes.dex"
 # 5. Align APK
 "$BUILD_TOOLS/zipalign" -f -p 4 "$WORK_DIR/unsigned.apk" "$WORK_DIR/aligned.apk"
 
-# 6. Generate signing key and sign APK (v1 + v2 signatures)
-keytool -genkeypair \
-  -keystore "$WORK_DIR/release.keystore" \
-  -alias hamhesab \
-  -keyalg RSA \
-  -keysize 2048 \
-  -validity 10000 \
-  -storepass hamhesab123 \
-  -keypass hamhesab123 \
-  -dname "CN=HamHesab, OU=Finance, O=HootanFatemeh, L=Tehran, S=Tehran, C=IR"
+# 6. Sign APK with a persistent signing certificate so Android allows in-place Updates
+# Priority:
+#   1) ANDROID_KEYSTORE_BASE64 env secret (if configured in GitHub Secrets)
+#   2) Persistent repository keystore at scripts/hamhesab-release.p12
+#   3) Fallback ephemeral keystore only if neither exists
+KEYSTORE_PATH=""
+KEYSTORE_TYPE_ARG=()
+KEY_ALIAS="${ANDROID_KEY_ALIAS:-hamhesab}"
+KEYSTORE_PASS="${ANDROID_KEYSTORE_PASSWORD:-hamhesab123}"
+KEY_PASS="${ANDROID_KEY_PASSWORD:-$KEYSTORE_PASS}"
+
+if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+  echo "Using signing keystore from ANDROID_KEYSTORE_BASE64 secret..."
+  KEYSTORE_PATH="$WORK_DIR/release.keystore"
+  printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+elif [ -f "$(pwd)/scripts/hamhesab-release.p12" ]; then
+  echo "Using persistent signing keystore: scripts/hamhesab-release.p12"
+  KEYSTORE_PATH="$(pwd)/scripts/hamhesab-release.p12"
+  KEYSTORE_TYPE_ARG=(--ks-type PKCS12)
+else
+  echo "WARNING: Persistent keystore not found; generating ephemeral signing key (in-place update will not work across builds)."
+  KEYSTORE_PATH="$WORK_DIR/release.keystore"
+  keytool -genkeypair \
+    -keystore "$KEYSTORE_PATH" \
+    -alias "$KEY_ALIAS" \
+    -keyalg RSA \
+    -keysize 2048 \
+    -validity 10000 \
+    -storepass "$KEYSTORE_PASS" \
+    -keypass "$KEY_PASS" \
+    -dname "CN=HamHesab, OU=Finance, O=HootanFatemeh, L=Tehran, S=Tehran, C=IR"
+fi
 
 "$BUILD_TOOLS/apksigner" sign \
-  --ks "$WORK_DIR/release.keystore" \
-  --ks-key-alias hamhesab \
-  --ks-pass pass:hamhesab123 \
-  --key-pass pass:hamhesab123 \
+  --ks "$KEYSTORE_PATH" \
+  "${KEYSTORE_TYPE_ARG[@]}" \
+  --ks-key-alias "$KEY_ALIAS" \
+  --ks-pass "pass:$KEYSTORE_PASS" \
+  --key-pass "pass:$KEY_PASS" \
   --v1-signing-enabled true \
   --v2-signing-enabled true \
+  --v3-signing-enabled true \
   --out "$DIST_DIR/hamhesab.apk" \
   "$WORK_DIR/aligned.apk"
 
+"$BUILD_TOOLS/apksigner" verify --print-certs "$DIST_DIR/hamhesab.apk"
+
 rm -rf "$WORK_DIR"
-echo "=== Successfully built $DIST_DIR/hamhesab.apk ==="
+echo "=== Successfully built $DIST_DIR/hamhesab.apk (v${VERSION_NAME} / code ${VERSION_CODE}) ==="
 ls -lh "$DIST_DIR/hamhesab.apk"
