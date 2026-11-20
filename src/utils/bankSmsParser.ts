@@ -54,9 +54,27 @@ declare global {
       isBiometricSupported?: () => boolean;
       authenticateBiometric?: (reason: string) => void;
       setSystemBarsColor?: (hexColor: string, darkIcons: boolean) => void;
+      isSystemDarkMode?: () => boolean;
+      hasNotificationPermission?: () => boolean;
+      requestNotificationPermission?: () => void;
+      consumePendingBankSms?: () => string;
+      consumePendingQuickAction?: () => string;
+      updateWidgetData?: (
+        userName: string,
+        totalBalanceText: string,
+        todayExpenseText: string,
+        monthExpenseText: string,
+        privacyMode: boolean
+      ) => void;
+      vibrateHaptic?: (style: number) => void;
+      clearWebCacheAndReload?: () => void;
+      getNativeAppVersion?: () => string;
     };
     onNativeBankSmsReceived?: (smsJson: string) => void;
     onNativeBiometricResult?: (success: boolean, errorMsg: string) => void;
+    onNativeSystemThemeChanged?: (isDark: boolean) => void;
+    onNativeQuickAction?: (action: string) => void;
+    onNativeAndroidBackPressed?: () => string;
   }
 }
 
@@ -103,11 +121,20 @@ function normalizeSmsText(rawText: string): string {
 }
 
 /**
- * Checks if a message looks like an Iranian financial/bank SMS
+ * Checks if a message looks like an actual completed Iranian financial/bank transaction SMS
+ * (excluding OTPs, future-tense notices, installment reminders, and failed transactions)
  */
 export function isLikelyBankSms(text: string, sender?: string): boolean {
   if (!text || text.trim().length < 10) return false;
   const normalized = normalizeSmsText(text);
+
+  // Exclude OTP / dynamic password / verification code / promotional / warning / future-tense / failed notices
+  const nonTransactionAlertRegex =
+    /رمز\s*پویا|رمز\s*دوم|رمز\s*یکبار|یکبار\s*مصرف|کد\s*تایید|کد\s*تائید|کد\s*ورود|کد\s*فعال\s*سازی|\botp\b|کسر\s*خواهد\s*شد|برداشت\s*خواهد\s*شد|واریز\s*خواهد\s*شد|تمدید\s*خواهد\s*شد|بسته\s*پیامک|آبونمان\s*شما|در\s*صورت\s*عدم\s*تمایل|سررسید\s*قسط|مهلت\s*پرداخت|یادآوری\s*قسط|یادآوری\s*پرداخت|بدهی\s*معوق|اقساط\s*معوق|عدم\s*کفایت\s*موجودی|موجودی\s*ناکافی|تراکنش\s*ناموفق|ناموفق\s*بود|تراکنش\s*لغو|منقضی\s*خواهد|تاریخ\s*انقضا/;
+
+  if (nonTransactionAlertRegex.test(normalized.toLowerCase())) {
+    return false;
+  }
 
   const hasMoneyWords =
     /برداشت|واریز|واريز|خرید|خريد|انتقال|مانده|موجودی|موجودي|حساب|سپرده|کارت|پایا|ساتنا|پل|ریال|ريال|تومان|قسط|بستانکار|بدهکار|افزایش|کسر/.test(
@@ -591,5 +618,52 @@ export function readAndroidBankSmsInbox(limit = 40): NativeAndroidSmsItem[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+export function hasAndroidNotificationPermission(): boolean {
+  try {
+    if (typeof window.AndroidSmsBridge?.hasNotificationPermission === 'function') {
+      return Boolean(window.AndroidSmsBridge.hasNotificationPermission());
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+export function requestAndroidNotificationPermission(): void {
+  try {
+    window.AndroidSmsBridge?.requestNotificationPermission?.();
+  } catch {
+    // ignore
+  }
+}
+
+export function consumePendingNativeBankSms(): NativeAndroidSmsItem[] {
+  try {
+    if (typeof window.AndroidSmsBridge?.consumePendingBankSms !== 'function') {
+      return [];
+    }
+    const raw = window.AndroidSmsBridge.consumePendingBankSms();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function triggerNativeHaptic(style: 'light' | 'confirm' | 'error' = 'light'): void {
+  try {
+    const code = style === 'error' ? 2 : style === 'confirm' ? 1 : 0;
+    if (typeof window.AndroidSmsBridge?.vibrateHaptic === 'function') {
+      window.AndroidSmsBridge.vibrateHaptic(code);
+      return;
+    }
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(style === 'error' ? [30, 40, 35] : style === 'confirm' ? 22 : 10);
+    }
+  } catch {
+    // ignore
   }
 }

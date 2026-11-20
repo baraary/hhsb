@@ -955,7 +955,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
                             scrollToCardIndex(idx);
                           }
                         }}
-                        className={`w-[88%] sm:w-[440px] shrink-0 snap-center transition-all duration-300 cursor-pointer ${
+                        className={`w-[78%] max-w-[330px] sm:w-[355px] sm:max-w-[355px] shrink-0 snap-center transition-all duration-300 cursor-pointer ${
                           isFocused
                             ? 'scale-100 opacity-100'
                             : 'scale-95 opacity-60 hover:opacity-85'
@@ -970,6 +970,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
                           privacyMode={isPrivacy}
                           onEdit={openEditModal}
                           onRandomizeStyle={handleQuickRandomizeCard}
+                          compact
                         />
                       </div>
                     );

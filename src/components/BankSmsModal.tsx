@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar, Clipboard, Smartphone, Check, Plus, X } from 'lucide-react';
-import { AppState, Transaction } from '../types';
+import { Calendar, Clipboard, Smartphone, Check, Plus, X, Bell, RotateCcw, EyeOff } from 'lucide-react';
+import { AppState, Category, TagItem, Transaction } from '../types';
 import {
   ParsedBankSms,
   parseIranianBankSms,
@@ -9,6 +9,8 @@ import {
   isAndroidApkWithSmsSupport,
   hasAndroidSmsPermission,
   requestAndroidSmsPermission,
+  hasAndroidNotificationPermission,
+  requestAndroidNotificationPermission,
   readAndroidBankSmsInbox,
 } from '../utils/bankSmsParser';
 import {
@@ -19,7 +21,7 @@ import {
   shiftJalaliDateByDays,
   formatJalaliReadable,
 } from '../utils/persian';
-import { CircularIcon } from './CircularIcon';
+import { CircularIcon, CATEGORY_PALETTE_COLORS } from './CircularIcon';
 import { JalaliDateInput } from './JalaliDateTimePicker';
 
 export type SmsDateRangePreset =
@@ -35,7 +37,11 @@ interface BankSmsModalProps {
   onClose: () => void;
   state: AppState;
   onImportTransactions: (txs: Omit<Transaction, 'id' | 'createdAt'>[]) => void;
+  onDismissSms?: (smsHash: string) => void;
+  onRestoreDismissedSms?: (smsHash: string) => void;
   onUpdateAutoCheckClipboard: (enabled: boolean) => void;
+  onSaveCategory?: (cat: Category) => void;
+  onSaveTag?: (tag: TagItem) => void;
   initialRawSms?: string;
 }
 
@@ -54,10 +60,22 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
   onClose,
   state,
   onImportTransactions,
+  onDismissSms,
+  onRestoreDismissedSms,
   onUpdateAutoCheckClipboard,
+  onSaveCategory,
+  onSaveTag,
   initialRawSms = '',
 }) => {
-  const { cards, categories, tags = [], transactions, importedSmsHashes = [], settings } = state;
+  const {
+    cards,
+    categories,
+    tags = [],
+    transactions,
+    importedSmsHashes = [],
+    dismissedSmsHashes = [],
+    settings,
+  } = state;
 
   const todayJalali = useMemo(() => getCurrentJalaliDateStr(), [isOpen]);
   const yesterdayJalali = useMemo(
@@ -88,10 +106,28 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
   const [allParsedItems, setAllParsedItems] = useState<ParsedBankSms[]>([]);
   const [statusMsg, setStatusMsg] = useState<string>('');
   const [isAndroidBridgeAvailable, setIsAndroidBridgeAvailable] = useState(false);
+  const [hasNotifPerm, setHasNotifPerm] = useState(true);
+
+  // Scoped inline quick-add state per parsed SMS item
+  const [inlineAdder, setInlineAdder] = useState<{
+    smsHash: string;
+    kind: 'category' | 'subcategory' | 'tag';
+  } | null>(null);
+  const [inlineDraftName, setInlineDraftName] = useState('');
+  const [inlineDraftColor, setInlineDraftColor] = useState('#10b981');
+  const [localDismissedHashes, setLocalDismissedHashes] = useState<string[]>([]);
+  const [showDismissedList, setShowDismissedList] = useState(false);
 
   useEffect(() => {
-    setIsAndroidBridgeAvailable(isAndroidApkWithSmsSupport());
+    const hasBridge = isAndroidApkWithSmsSupport();
+    setIsAndroidBridgeAvailable(hasBridge);
+    setHasNotifPerm(hasBridge ? hasAndroidNotificationPermission() : true);
     setConvertRialToToman(settings.currencyUnit === 'تومان');
+    if (!isOpen) {
+      setInlineAdder(null);
+      setInlineDraftName('');
+      setShowDismissedList(false);
+    }
   }, [isOpen, settings.currencyUnit]);
 
   useEffect(() => {
@@ -152,6 +188,27 @@ export const BankSmsModal: React.FC<BankSmsModalProps> = ({
       importedSmsHashes.includes(smsHash) ||
       transactions.some((t) => t.smsHash === smsHash)
     );
+  };
+
+  const isDismissedSms = (smsHash: string): boolean => {
+    return (
+      dismissedSmsHashes.includes(smsHash) ||
+      localDismissedHashes.includes(smsHash)
+    );
+  };
+
+  const handleDismissItem = (item: ParsedBankSms) => {
+    setLocalDismissedHashes((prev) =>
+      prev.includes(item.smsHash) ? prev : [...prev, item.smsHash]
+    );
+    onDismissSms?.(item.smsHash);
+    setStatusMsg(`پیامک «${item.title}» رد شد و دیگر در لیست ثبت نمایش داده نمی‌شود.`);
+  };
+
+  const handleRestoreDismissedItem = (item: ParsedBankSms) => {
+    setLocalDismissedHashes((prev) => prev.filter((h) => h !== item.smsHash));
+    onRestoreDismissedSms?.(item.smsHash);
+    setStatusMsg(`پیامک «${item.title}» به لیست بازگردانده شد.`);
   };
 
   const handleParseRawText = (text: string, rialToToman = convertRialToToman) => {
@@ -331,8 +388,15 @@ ${threeDaysAgo} 18:45
     setStatusMsg(`تراکنش «${item.title}» با موفقیت ثبت شد.`);
   };
 
+  const visibleParsedItems = filteredParsedItems.filter(
+    (item) => !isDismissedSms(item.smsHash)
+  );
+  const dismissedInRangeItems = filteredParsedItems.filter(
+    (item) => isDismissedSms(item.smsHash) && !isAlreadyImported(item.smsHash)
+  );
+
   const handleImportAllNew = () => {
-    const newItems = filteredParsedItems.filter(
+    const newItems = visibleParsedItems.filter(
       (item) => !isAlreadyImported(item.smsHash)
     );
     if (newItems.length === 0) return;
@@ -357,7 +421,7 @@ ${threeDaysAgo} 18:45
     onClose();
   };
 
-  const unimportedCount = filteredParsedItems.filter(
+  const unimportedCount = visibleParsedItems.filter(
     (item) => !isAlreadyImported(item.smsHash)
   ).length;
 
@@ -494,6 +558,26 @@ ${threeDaysAgo} 18:45
           </button>
         </div>
 
+        {/* Android APK Background SMS Notification Permission Strip */}
+        {isAndroidBridgeAvailable && !hasNotifPerm && (
+          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+              <Bell size={15} className="shrink-0" />
+              <span>برای دریافت نوتیفیکیشن فوری پیامک بانکی وقتی اپ بسته است، مجوز اعلان را فعال کنید:</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                requestAndroidNotificationPermission();
+                setTimeout(() => setHasNotifPerm(hasAndroidNotificationPermission()), 1500);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-emerald-500 text-white text-xs font-extrabold cursor-pointer shrink-0"
+            >
+              فعال‌سازی اعلان پس‌زمینه
+            </button>
+          </div>
+        )}
+
         {/* Options Strip: Rial to Toman & Auto Clipboard Check */}
         <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70 text-xs">
           <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700 dark:text-slate-200">
@@ -577,23 +661,86 @@ ${threeDaysAgo} 18:45
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
-                تراکنش‌های استخراج‌شده در این بازه ({toPersianDigits(filteredParsedItems.length)} مورد)
+                تراکنش‌های استخراج‌شده در این بازه ({toPersianDigits(visibleParsedItems.length)} مورد)
               </h4>
 
-              {unimportedCount > 0 && (
-                <button
-                  type="button"
-                  onClick={handleImportAllNew}
-                  className="px-4 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-sm flex items-center gap-1.5"
-                >
-                  <Check size={14} strokeWidth={2.5} />
-                  <span>ثبت یکجای همه ({toPersianDigits(unimportedCount)} تراکنش جدید)</span>
-                </button>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {dismissedInRangeItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDismissedList((prev) => !prev)}
+                    className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer flex items-center gap-1.5"
+                  >
+                    <EyeOff size={13} />
+                    <span>
+                      {toPersianDigits(dismissedInRangeItems.length)} رد شده
+                      {showDismissedList ? ' (بستن)' : ' (مشاهده)'}
+                    </span>
+                  </button>
+                )}
+
+                {unimportedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleImportAllNew}
+                    className="px-4 py-2 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shadow-sm flex items-center gap-1.5"
+                  >
+                    <Check size={14} strokeWidth={2.5} />
+                    <span>ثبت یکجای همه ({toPersianDigits(unimportedCount)} تراکنش جدید)</span>
+                  </button>
+                )}
+              </div>
             </div>
 
+            {showDismissedList && dismissedInRangeItems.length > 0 && (
+              <div className="p-3.5 rounded-2xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300">
+                    پیامک‌های رد شده در این بازه
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    برای برگرداندن به لیست ثبت، روی بازگردانی بزنید
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {dismissedInRangeItems.map((dItem, dIdx) => (
+                    <div
+                      key={`dismissed_${dItem.smsHash}_${dIdx}`}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">
+                          {dItem.title} ·{' '}
+                          <span className="tabular-nums">
+                            {formatMoney(dItem.amount)} {settings.currencyUnit}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                          {dItem.note}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRestoreDismissedItem(dItem)}
+                        className="px-2.5 py-1.5 rounded-lg bg-emerald-500/12 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[11px] font-extrabold cursor-pointer shrink-0 flex items-center gap-1"
+                      >
+                        <RotateCcw size={12} />
+                        <span>بازگردانی</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {visibleParsedItems.length === 0 && dismissedInRangeItems.length > 0 && (
+              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-500 dark:text-slate-400">
+                تمام پیامک‌های این بازه رد شده‌اند. در صورت نیاز می‌توانید از دکمه «رد شده» آن‌ها را بازگردانی کنید.
+              </div>
+            )}
+
             <div className="space-y-3">
-              {filteredParsedItems.map((item, idx) => {
+              {visibleParsedItems.map((item, idx) => {
                 const alreadySaved = isAlreadyImported(item.smsHash);
                 const itemCategories = categories.filter((c) => c.type === item.type);
                 const selectedCategoryObj =
@@ -731,9 +878,32 @@ ${threeDaysAgo} 18:45
                       </div>
 
                       <div className="sm:col-span-2">
-                        <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
-                          دسته‌بندی
-                        </label>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="text-[10px] font-bold text-slate-400">
+                            دسته‌بندی
+                          </label>
+                          {onSaveCategory && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (
+                                  inlineAdder?.smsHash === item.smsHash &&
+                                  inlineAdder.kind === 'category'
+                                ) {
+                                  setInlineAdder(null);
+                                } else {
+                                  setInlineAdder({ smsHash: item.smsHash, kind: 'category' });
+                                  setInlineDraftName('');
+                                  setInlineDraftColor('#10b981');
+                                }
+                              }}
+                              className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-0.5"
+                            >
+                              <Plus size={10} strokeWidth={2.8} />
+                              <span>جدید</span>
+                            </button>
+                          )}
+                        </div>
                         <select
                           value={selectedCategoryObj?.id || item.categoryId}
                           onChange={(e) => {
@@ -754,9 +924,31 @@ ${threeDaysAgo} 18:45
                       </div>
 
                       <div className="sm:col-span-3">
-                        <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
-                          زیردسته
-                        </label>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="text-[10px] font-bold text-slate-400">
+                            زیردسته
+                          </label>
+                          {onSaveCategory && selectedCategoryObj && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (
+                                  inlineAdder?.smsHash === item.smsHash &&
+                                  inlineAdder.kind === 'subcategory'
+                                ) {
+                                  setInlineAdder(null);
+                                } else {
+                                  setInlineAdder({ smsHash: item.smsHash, kind: 'subcategory' });
+                                  setInlineDraftName('');
+                                }
+                              }}
+                              className="text-[10px] font-extrabold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer flex items-center gap-0.5"
+                            >
+                              <Plus size={10} strokeWidth={2.8} />
+                              <span>جدید</span>
+                            </button>
+                          )}
+                        </div>
                         <select
                           value={item.subCategoryId || subCategoryList[0]?.id || ''}
                           onChange={(e) =>
@@ -775,48 +967,231 @@ ${threeDaysAgo} 18:45
                       </div>
                     </div>
 
-                    {/* Interactive Tags Selector Row */}
-                    {tags.length > 0 && (
-                      <div className="pt-0.5">
-                        <label className="block text-[10px] font-bold text-slate-400 mb-1">
-                          تگ‌ها (انتخاب اختیاری):
-                        </label>
-                        <div
-                          data-no-swipe="true"
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onTouchMove={(e) => e.stopPropagation()}
-                          onTouchEnd={(e) => e.stopPropagation()}
-                          className="flex flex-wrap items-center gap-1.5"
-                        >
-                          {tags.map((tag) => {
-                            const isTagSelected = (item.tags || []).includes(tag.id);
-                            return (
-                              <button
-                                key={tag.id}
-                                type="button"
-                                onClick={() => toggleItemTag(tag.id)}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold cursor-pointer flex items-center gap-1 transition-all ${
-                                  isTagSelected
-                                    ? 'text-white shadow-2xs'
-                                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-400'
-                                }`}
-                                style={
-                                  isTagSelected
-                                    ? { backgroundColor: tag.color || '#10b981' }
-                                    : undefined
+                    {/* Inline Quick-Add Form for Category / SubCategory / Tag on this SMS item */}
+                    {inlineAdder?.smsHash === item.smsHash && (
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-500/35 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={inlineDraftName}
+                            onChange={(e) => setInlineDraftName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const clean = inlineDraftName.trim().replace(/^#+/, '');
+                                if (!clean) return;
+                                if (inlineAdder.kind === 'category' && onSaveCategory) {
+                                  const now = Date.now();
+                                  const subId = `sub_${now}`;
+                                  const newCat: Category = {
+                                    id: `cat_${now}`,
+                                    name: clean,
+                                    type: item.type === 'income' ? 'income' : 'expense',
+                                    icon: 'shopping-cart',
+                                    color: inlineDraftColor,
+                                    subCategories: [{ id: subId, name: 'عمومی', icon: 'shopping-cart' }],
+                                  };
+                                  onSaveCategory(newCat);
+                                  handleUpdateParsedItem(item.smsHash, {
+                                    categoryId: newCat.id,
+                                    subCategoryId: subId,
+                                  });
+                                } else if (
+                                  inlineAdder.kind === 'subcategory' &&
+                                  onSaveCategory &&
+                                  selectedCategoryObj
+                                ) {
+                                  const subId = `sub_${Date.now()}`;
+                                  onSaveCategory({
+                                    ...selectedCategoryObj,
+                                    subCategories: [
+                                      ...selectedCategoryObj.subCategories,
+                                      { id: subId, name: clean, icon: selectedCategoryObj.icon },
+                                    ],
+                                  });
+                                  handleUpdateParsedItem(item.smsHash, {
+                                    categoryId: selectedCategoryObj.id,
+                                    subCategoryId: subId,
+                                  });
+                                } else if (inlineAdder.kind === 'tag' && onSaveTag) {
+                                  const newTag: TagItem = {
+                                    id: `tag_${Date.now()}`,
+                                    name: clean,
+                                    color: inlineDraftColor,
+                                  };
+                                  onSaveTag(newTag);
+                                  handleUpdateParsedItem(item.smsHash, {
+                                    tags: [...(item.tags || []), newTag.id],
+                                  });
                                 }
-                              >
-                                <span>#{tag.name}</span>
-                                {isTagSelected && <Check size={11} strokeWidth={2.8} />}
-                              </button>
-                            );
-                          })}
+                                setInlineAdder(null);
+                                setInlineDraftName('');
+                              }
+                            }}
+                            placeholder={
+                              inlineAdder.kind === 'category'
+                                ? `نام دسته‌بندی جدید (${item.type === 'income' ? 'درآمد' : 'هزینه'})...`
+                                : inlineAdder.kind === 'subcategory'
+                                ? `نام زیردسته جدید برای «${selectedCategoryObj?.name || ''}»...`
+                                : 'نام تگ جدید (مثلاً: سفر، ضروری)...'
+                            }
+                            className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                          />
+                          <button
+                            type="button"
+                            disabled={!inlineDraftName.trim()}
+                            onClick={() => {
+                              const clean = inlineDraftName.trim().replace(/^#+/, '');
+                              if (!clean) return;
+                              if (inlineAdder.kind === 'category' && onSaveCategory) {
+                                const now = Date.now();
+                                const subId = `sub_${now}`;
+                                const newCat: Category = {
+                                  id: `cat_${now}`,
+                                  name: clean,
+                                  type: item.type === 'income' ? 'income' : 'expense',
+                                  icon: 'shopping-cart',
+                                  color: inlineDraftColor,
+                                  subCategories: [{ id: subId, name: 'عمومی', icon: 'shopping-cart' }],
+                                };
+                                onSaveCategory(newCat);
+                                handleUpdateParsedItem(item.smsHash, {
+                                  categoryId: newCat.id,
+                                  subCategoryId: subId,
+                                });
+                              } else if (
+                                inlineAdder.kind === 'subcategory' &&
+                                onSaveCategory &&
+                                selectedCategoryObj
+                              ) {
+                                const subId = `sub_${Date.now()}`;
+                                onSaveCategory({
+                                  ...selectedCategoryObj,
+                                  subCategories: [
+                                    ...selectedCategoryObj.subCategories,
+                                    { id: subId, name: clean, icon: selectedCategoryObj.icon },
+                                  ],
+                                });
+                                handleUpdateParsedItem(item.smsHash, {
+                                  categoryId: selectedCategoryObj.id,
+                                  subCategoryId: subId,
+                                });
+                              } else if (inlineAdder.kind === 'tag' && onSaveTag) {
+                                const newTag: TagItem = {
+                                  id: `tag_${Date.now()}`,
+                                  name: clean,
+                                  color: inlineDraftColor,
+                                };
+                                onSaveTag(newTag);
+                                handleUpdateParsedItem(item.smsHash, {
+                                  tags: [...(item.tags || []), newTag.id],
+                                });
+                              }
+                              setInlineAdder(null);
+                              setInlineDraftName('');
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg theme-bg text-white text-[11px] font-extrabold cursor-pointer disabled:opacity-45 shrink-0 flex items-center gap-1"
+                          >
+                            <Check size={12} strokeWidth={2.6} />
+                            <span>افزودن</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setInlineAdder(null)}
+                            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-pointer shrink-0"
+                            aria-label="انصراف"
+                          >
+                            <X size={12} />
+                          </button>
                         </div>
+
+                        {(inlineAdder.kind === 'category' || inlineAdder.kind === 'tag') && (
+                          <div className="flex flex-wrap items-center gap-2 p-1.5">
+                            {CATEGORY_PALETTE_COLORS.map((col) => (
+                              <button
+                                key={col}
+                                type="button"
+                                onClick={() => setInlineDraftColor(col)}
+                                className={`w-5 h-5 rounded-full cursor-pointer transition-transform flex items-center justify-center text-white ${
+                                  inlineDraftColor === col
+                                    ? 'ring-2 ring-offset-2 ring-slate-900 dark:ring-white dark:ring-offset-slate-900 scale-110'
+                                    : 'hover:scale-105'
+                                }`}
+                                style={{ backgroundColor: col }}
+                                aria-label="انتخاب رنگ"
+                              >
+                                {inlineDraftColor === col && <Check size={10} strokeWidth={3} />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-[11px] text-slate-400 truncate max-w-xs sm:max-w-md">
+                    {/* Interactive Tags Selector Row + Quick Add Tag */}
+                    <div className="pt-0.5">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-400">
+                          تگ‌ها (انتخاب اختیاری):
+                        </label>
+                        {onSaveTag && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (
+                                inlineAdder?.smsHash === item.smsHash &&
+                                inlineAdder.kind === 'tag'
+                              ) {
+                                setInlineAdder(null);
+                              } else {
+                                setInlineAdder({ smsHash: item.smsHash, kind: 'tag' });
+                                setInlineDraftName('');
+                                setInlineDraftColor('#8b5cf6');
+                              }
+                            }}
+                            className="text-[10px] font-extrabold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            <Plus size={10} strokeWidth={2.8} />
+                            <span>تگ جدید</span>
+                          </button>
+                        )}
+                      </div>
+                      <div
+                        data-no-swipe="true"
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onTouchMove={(e) => e.stopPropagation()}
+                        onTouchEnd={(e) => e.stopPropagation()}
+                        className="flex flex-wrap items-center gap-1.5"
+                      >
+                        {tags.map((tag) => {
+                          const isTagSelected = (item.tags || []).includes(tag.id);
+                          return (
+                            <button
+                              key={tag.id}
+                              type="button"
+                              onClick={() => toggleItemTag(tag.id)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold cursor-pointer flex items-center gap-1 transition-all ${
+                                isTagSelected
+                                  ? 'text-white shadow-2xs'
+                                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                              }`}
+                              style={
+                                isTagSelected
+                                  ? { backgroundColor: tag.color || '#10b981' }
+                                  : undefined
+                              }
+                            >
+                              <span>#{tag.name}</span>
+                              {isTagSelected && <Check size={11} strokeWidth={2.8} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-[11px] text-slate-400 truncate max-w-full sm:max-w-md">
                         متن پیامک: {item.note}
                       </span>
 
@@ -826,14 +1201,26 @@ ${threeDaysAgo} 18:45
                           <span>قبلاً ثبت شده</span>
                         </span>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleImportSingle(item)}
-                          className="px-3.5 py-1.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer shrink-0 flex items-center gap-1"
-                        >
-                          <Plus size={14} strokeWidth={2.5} />
-                          <span>ثبت این تراکنش</span>
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleDismissItem(item)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-200/80 dark:bg-slate-800 hover:bg-rose-500/15 hover:text-rose-600 dark:hover:text-rose-400 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer flex items-center gap-1 transition-colors"
+                            title="رد کردن این پیامک (عدم ثبت به‌عنوان تراکنش)"
+                          >
+                            <X size={13} strokeWidth={2.5} />
+                            <span>رد کردن</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleImportSingle(item)}
+                            className="px-3.5 py-1.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer flex items-center gap-1"
+                          >
+                            <Plus size={14} strokeWidth={2.5} />
+                            <span>ثبت این تراکنش</span>
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>

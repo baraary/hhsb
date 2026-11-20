@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Zap, ArrowLeftRight, Trash2, Copy } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Zap, ArrowLeftRight, Trash2, Copy, Plus, Check, X } from 'lucide-react';
 import {
   AppState,
+  Category,
+  TagItem,
   Transaction,
   TransactionType,
 } from '../types';
@@ -12,7 +14,12 @@ import {
   getCurrentTimeStr,
   getCurrentJalaliDateStr,
 } from '../utils/persian';
-import { CircularIcon } from './CircularIcon';
+import {
+  CircularIcon,
+  IconName,
+  AVAILABLE_ICONS,
+  CATEGORY_PALETTE_COLORS,
+} from './CircularIcon';
 import { JalaliDateTimePicker } from './JalaliDateTimePicker';
 import { BankLogoVector, IRANIAN_BANKS } from '../utils/iranianBanks';
 
@@ -22,6 +29,8 @@ interface TransactionModalProps {
   state: AppState;
   onSave: (tx: Omit<Transaction, 'id' | 'createdAt'>, existingId?: string) => void;
   onDelete?: (id: string) => void;
+  onSaveCategory?: (cat: Category) => void;
+  onSaveTag?: (tag: TagItem) => void;
   editingTransaction?: Transaction | null;
 }
 
@@ -98,6 +107,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   state,
   onSave,
   onDelete,
+  onSaveCategory,
+  onSaveTag,
   editingTransaction,
 }) => {
   const { categories, tags, cards, settings } = state;
@@ -114,6 +125,22 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [time, setTime] = useState('19:30');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
+
+  // Inline Quick-Add States for Category, SubCategory, and Tag
+  const [isAddingCat, setIsAddingCat] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatFirstSub, setNewCatFirstSub] = useState('');
+  const [newCatColor, setNewCatColor] = useState('#10b981');
+  const [newCatIcon, setNewCatIcon] = useState<IconName>('shopping-cart');
+
+  const [isAddingSub, setIsAddingSub] = useState(false);
+  const [newSubName, setNewSubName] = useState('');
+
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#0ea5e9');
+
+  const initializedSessionRef = useRef<string | null>(null);
 
   const filteredCategories = categories.filter(
     (c) => c.type === (type === 'transfer' ? 'expense' : type)
@@ -143,6 +170,20 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   }, [state.transactions]);
 
   useEffect(() => {
+    if (!isOpen) {
+      initializedSessionRef.current = null;
+      setIsAddingCat(false);
+      setIsAddingSub(false);
+      setIsAddingTag(false);
+      return;
+    }
+
+    const sessionKey = editingTransaction ? `edit_${editingTransaction.id}` : 'new';
+    if (initializedSessionRef.current === sessionKey) {
+      return;
+    }
+    initializedSessionRef.current = sessionKey;
+
     if (editingTransaction) {
       setType(editingTransaction.type);
       setTitle(editingTransaction.title);
@@ -172,7 +213,70 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setNote('');
       setError('');
     }
+    setIsAddingCat(false);
+    setNewCatName('');
+    setNewCatFirstSub('');
+    setIsAddingSub(false);
+    setNewSubName('');
+    setIsAddingTag(false);
+    setNewTagName('');
   }, [editingTransaction, isOpen, categories, cards]);
+
+  const handleQuickCreateCategory = () => {
+    const cleanName = newCatName.trim();
+    if (!cleanName || !onSaveCategory) return;
+    const now = Date.now();
+    const firstSubName = newCatFirstSub.trim() || 'عمومی';
+    const firstSubId = `sub_${now}`;
+    const newCat: Category = {
+      id: `cat_${now}`,
+      name: cleanName,
+      type: type === 'income' ? 'income' : 'expense',
+      icon: newCatIcon,
+      color: newCatColor,
+      subCategories: [{ id: firstSubId, name: firstSubName, icon: newCatIcon }],
+    };
+    onSaveCategory(newCat);
+    setCategoryId(newCat.id);
+    setSubCategoryId(firstSubId);
+    setNewCatName('');
+    setNewCatFirstSub('');
+    setIsAddingCat(false);
+  };
+
+  const handleQuickCreateSubCategory = () => {
+    const cleanName = newSubName.trim();
+    if (!cleanName || !activeCategory || !onSaveCategory) return;
+    const newSubId = `sub_${Date.now()}`;
+    const updatedCat: Category = {
+      ...activeCategory,
+      subCategories: [
+        ...activeCategory.subCategories,
+        { id: newSubId, name: cleanName, icon: activeCategory.icon },
+      ],
+    };
+    onSaveCategory(updatedCat);
+    setCategoryId(activeCategory.id);
+    setSubCategoryId(newSubId);
+    setNewSubName('');
+    setIsAddingSub(false);
+  };
+
+  const handleQuickCreateTag = () => {
+    const cleanName = newTagName.trim().replace(/^#+/, '');
+    if (!cleanName || !onSaveTag) return;
+    const newTag: TagItem = {
+      id: `tag_${Date.now()}`,
+      name: cleanName,
+      color: newTagColor,
+    };
+    onSaveTag(newTag);
+    setSelectedTags((prev) =>
+      prev.includes(newTag.id) ? prev : [...prev, newTag.id]
+    );
+    setNewTagName('');
+    setIsAddingTag(false);
+  };
 
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
@@ -542,9 +646,136 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           {type !== 'transfer' && (
             <>
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                  دسته‌بندی اصلی
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    دسته‌بندی اصلی
+                  </label>
+                  {onSaveCategory && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCat((prev) => !prev)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/12 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[11px] font-extrabold cursor-pointer transition-all"
+                    >
+                      {isAddingCat ? <X size={12} /> : <Plus size={12} strokeWidth={2.6} />}
+                      <span>{isAddingCat ? 'بستن' : 'دسته جدید'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {isAddingCat && onSaveCategory && (
+                  <div className="mb-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-emerald-500/35 space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={newCatName}
+                        onChange={(e) => setNewCatName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleQuickCreateCategory();
+                          }
+                        }}
+                        placeholder={`نام دسته جدید (${type === 'income' ? 'درآمد' : 'هزینه'})...`}
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                      />
+                      <input
+                        type="text"
+                        value={newCatFirstSub}
+                        onChange={(e) => setNewCatFirstSub(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleQuickCreateCategory();
+                          }
+                        }}
+                        placeholder="نام زیردسته اول (اختیاری - پیش‌فرض: عمومی)"
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                          انتخاب رنگ دسته
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2 p-2 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-700/70">
+                          {CATEGORY_PALETTE_COLORS.map((col) => {
+                            const active = newCatColor === col;
+                            return (
+                              <button
+                                key={col}
+                                type="button"
+                                onClick={() => setNewCatColor(col)}
+                                className={`w-6 h-6 rounded-full cursor-pointer transition-transform flex items-center justify-center text-white ${
+                                  active
+                                    ? 'ring-2 ring-offset-2 ring-slate-900 dark:ring-white dark:ring-offset-slate-900 scale-110'
+                                    : 'hover:scale-105'
+                                }`}
+                                style={{ backgroundColor: col }}
+                                aria-label="انتخاب رنگ دسته"
+                              >
+                                {active && <Check size={12} strokeWidth={3} />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                          انتخاب آیکون دسته
+                        </span>
+                        <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 max-h-44 overflow-y-auto p-2 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-700/70">
+                          {AVAILABLE_ICONS.map((ic) => {
+                            const active = newCatIcon === ic.id;
+                            return (
+                              <button
+                                key={ic.id}
+                                type="button"
+                                onClick={() => setNewCatIcon(ic.id)}
+                                className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl border-2 cursor-pointer transition-all ${
+                                  active
+                                    ? 'border-emerald-500 bg-emerald-500/12 text-slate-900 dark:text-white shadow-2xs'
+                                    : 'border-transparent bg-slate-100/70 dark:bg-slate-800/70 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
+                                }`}
+                              >
+                                <CircularIcon
+                                  name={ic.id}
+                                  color={newCatColor}
+                                  size="xs"
+                                  variant={active ? 'solid' : 'soft'}
+                                />
+                                <span className="text-[10px] font-bold truncate max-w-full leading-tight">
+                                  {ic.label}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingCat(false)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-200/70 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
+                      >
+                        انصراف
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!newCatName.trim()}
+                        onClick={handleQuickCreateCategory}
+                        className="px-3.5 py-1.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer disabled:opacity-45 flex items-center gap-1"
+                      >
+                        <Check size={13} strokeWidth={2.5} />
+                        <span>افزودن و انتخاب دسته</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {filteredCategories.map((cat) => {
                     const isSelected = activeCategory?.id === cat.id;
@@ -574,11 +805,51 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </div>
               </div>
 
-              {activeCategory && activeCategory.subCategories.length > 0 && (
+              {activeCategory && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                    زیردسته (دسته‌بندی ریزترِ {activeCategory.name})
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      زیردسته (دسته‌بندی ریزترِ {activeCategory.name})
+                    </label>
+                    {onSaveCategory && (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingSub((prev) => !prev)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-sky-500/12 hover:bg-sky-500/20 text-sky-700 dark:text-sky-300 text-[11px] font-extrabold cursor-pointer transition-all"
+                      >
+                        {isAddingSub ? <X size={12} /> : <Plus size={12} strokeWidth={2.6} />}
+                        <span>{isAddingSub ? 'بستن' : 'زیردسته جدید'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {isAddingSub && onSaveCategory && (
+                    <div className="mb-2.5 flex items-center gap-2 p-2 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-sky-500/35">
+                      <input
+                        type="text"
+                        value={newSubName}
+                        onChange={(e) => setNewSubName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleQuickCreateSubCategory();
+                          }
+                        }}
+                        placeholder={`نام زیردسته جدید برای «${activeCategory.name}»...`}
+                        className="flex-1 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-sky-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={!newSubName.trim()}
+                        onClick={handleQuickCreateSubCategory}
+                        className="px-3 py-1.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer disabled:opacity-45 shrink-0 flex items-center gap-1"
+                      >
+                        <Check size={13} strokeWidth={2.5} />
+                        <span>افزودن</span>
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-2">
                     {activeCategory.subCategories.map((sub) => {
                       const isSubSelected = subCategoryId === sub.id;
@@ -766,9 +1037,72 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
           {/* Tags Selection */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-              تگ‌ها (برچسب‌های دلخواه)
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                تگ‌ها (برچسب‌های دلخواه)
+              </label>
+              {onSaveTag && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingTag((prev) => !prev)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-violet-500/12 hover:bg-violet-500/20 text-violet-700 dark:text-violet-300 text-[11px] font-extrabold cursor-pointer transition-all"
+                >
+                  {isAddingTag ? <X size={12} /> : <Plus size={12} strokeWidth={2.6} />}
+                  <span>{isAddingTag ? 'بستن' : 'تگ جدید'}</span>
+                </button>
+              )}
+            </div>
+
+            {isAddingTag && onSaveTag && (
+              <div className="mb-2.5 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-violet-500/35 space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newTagName}
+                    onChange={(e) => setNewTagName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleQuickCreateTag();
+                      }
+                    }}
+                    placeholder="نام تگ جدید (مثلاً: سفر، ضروری، مهمانی)..."
+                    className="flex-1 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-violet-500"
+                  />
+                  <button
+                    type="button"
+                    disabled={!newTagName.trim()}
+                    onClick={handleQuickCreateTag}
+                    className="px-3 py-1.5 rounded-xl theme-bg text-white text-xs font-extrabold cursor-pointer disabled:opacity-45 shrink-0 flex items-center gap-1"
+                  >
+                    <Check size={13} strokeWidth={2.5} />
+                    <span>افزودن</span>
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 p-1.5">
+                  {CATEGORY_PALETTE_COLORS.map((col) => {
+                    const active = newTagColor === col;
+                    return (
+                      <button
+                        key={col}
+                        type="button"
+                        onClick={() => setNewTagColor(col)}
+                        className={`w-5 h-5 rounded-full cursor-pointer transition-transform flex items-center justify-center text-white ${
+                          active
+                            ? 'ring-2 ring-offset-2 ring-slate-900 dark:ring-white dark:ring-offset-slate-900 scale-110'
+                            : 'hover:scale-105'
+                        }`}
+                        style={{ backgroundColor: col }}
+                        aria-label="انتخاب رنگ تگ"
+                      >
+                        {active && <Check size={10} strokeWidth={3} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2">
               {tags.map((tag) => {
                 const active = selectedTags.includes(tag.id);

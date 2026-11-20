@@ -250,6 +250,7 @@ export interface AppState {
   savingsGoals?: SavingsGoal[];
   dismissedReminderIds?: string[];
   importedSmsHashes?: string[];
+  dismissedSmsHashes?: string[];
   encryptedVault?: EncryptedVaultPayload;
   settings: AppSettings;
   updatedAt?: number;

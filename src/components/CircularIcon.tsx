@@ -1,216 +1,324 @@
 import React from 'react';
 import {
-  ShoppingBag,
-  Utensils,
+  ShoppingCart,
   Home,
   Car,
+  Utensils,
   HeartPulse,
   Sparkles,
-  Tv,
   Gift,
-  Briefcase,
-  TrendingUp,
-  CreditCard,
   Wallet,
+  Banknote,
+  CreditCard,
+  TrendingUp,
+  TrendingDown,
   PieChart,
   Archive,
   Settings,
   Plus,
-  ArrowUpRight,
-  ArrowDownLeft,
+  Search,
   Calendar,
-  Clock,
-  Tag,
-  User,
+  Bell,
   Users,
-  Check,
-  Trash2,
-  Edit3,
-  Download,
-  Upload,
+  Tag,
+  Lock,
   Moon,
   Sun,
-  Search,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Smartphone,
-  Coffee,
-  ShoppingCart,
-  Fuel,
-  Stethoscope,
-  Scissors,
-  Plane,
-  BookOpen,
-  DollarSign,
-  Award,
-  Layers,
-  Lock,
+  Download,
   RefreshCw,
-  Palette,
-  Shuffle,
-  MessageSquare,
-  Clipboard,
-  Package,
-  Link2,
-  FileText,
-  ShieldCheck,
+  Check,
   X,
-  Copy,
-  RotateCcw,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Coffee,
+  Smartphone,
+  Plane,
+  Shield,
+  Shirt,
+  Fuel,
+  Bus,
+  Bike,
+  Zap,
+  Droplets,
+  Flame,
+  Wifi,
+  GraduationCap,
+  BookOpen,
+  Dumbbell,
+  Pill,
+  Stethoscope,
+  Baby,
+  PawPrint,
+  Wrench,
+  Briefcase,
+  Laptop,
+  Gamepad2,
+  Film,
+  Music,
+  Camera,
+  Scissors,
+  Landmark,
+  Coins,
+  PiggyBank,
+  Receipt,
+  Umbrella,
+  Trees,
+  Watch,
+  Gem,
+  Package,
+  Store,
+  Building2,
+  Sofa,
+  Hammer,
+  Ticket,
+  UtensilsCrossed,
 } from 'lucide-react';
 
 export type IconName =
-  | 'shopping-bag'
-  | 'utensils'
+  | 'shopping-cart'
   | 'home'
   | 'car'
+  | 'utensils'
   | 'heart-pulse'
   | 'sparkles'
-  | 'tv'
   | 'gift'
-  | 'briefcase'
-  | 'trending-up'
-  | 'credit-card'
   | 'wallet'
+  | 'banknote'
+  | 'credit-card'
+  | 'trending-up'
+  | 'trending-down'
   | 'pie-chart'
   | 'archive'
   | 'settings'
   | 'plus'
-  | 'arrow-up'
-  | 'arrow-down'
+  | 'search'
   | 'calendar'
-  | 'clock'
-  | 'tag'
-  | 'user'
+  | 'bell'
   | 'users'
-  | 'check'
-  | 'trash'
-  | 'edit'
-  | 'download'
-  | 'upload'
+  | 'tag'
+  | 'lock'
   | 'moon'
   | 'sun'
-  | 'search'
-  | 'filter'
-  | 'chevron-left'
-  | 'chevron-right'
-  | 'chevron-down'
-  | 'chevron-up'
-  | 'smartphone'
-  | 'coffee'
-  | 'shopping-cart'
-  | 'fuel'
-  | 'stethoscope'
-  | 'scissors'
-  | 'plane'
-  | 'book'
-  | 'dollar'
-  | 'award'
-  | 'layers'
-  | 'lock'
+  | 'download'
   | 'refresh'
-  | 'palette'
-  | 'shuffle'
-  | 'message-square'
-  | 'clipboard'
-  | 'package'
-  | 'link'
-  | 'file-text'
-  | 'shield'
+  | 'check'
   | 'x'
-  | 'copy'
-  | 'rotate-ccw';
+  | 'arrow-up-right'
+  | 'arrow-down-left'
+  | 'coffee'
+  | 'smartphone'
+  | 'plane'
+  | 'shield'
+  | 'shirt'
+  | 'fuel'
+  | 'bus'
+  | 'bike'
+  | 'zap'
+  | 'droplets'
+  | 'flame'
+  | 'wifi'
+  | 'graduation-cap'
+  | 'book-open'
+  | 'dumbbell'
+  | 'pill'
+  | 'stethoscope'
+  | 'baby'
+  | 'paw-print'
+  | 'wrench'
+  | 'briefcase'
+  | 'laptop'
+  | 'gamepad-2'
+  | 'film'
+  | 'music'
+  | 'camera'
+  | 'scissors'
+  | 'landmark'
+  | 'coins'
+  | 'piggy-bank'
+  | 'receipt'
+  | 'umbrella'
+  | 'trees'
+  | 'watch'
+  | 'gem'
+  | 'package'
+  | 'store'
+  | 'building-2'
+  | 'sofa'
+  | 'hammer'
+  | 'ticket'
+  | 'utensils-crossed';
 
-const ICON_MAP: Record<string, React.ElementType> = {
-  'shopping-bag': ShoppingBag,
-  utensils: Utensils,
+const ICON_MAP: Record<IconName, React.ElementType> = {
+  'shopping-cart': ShoppingCart,
   home: Home,
   car: Car,
+  utensils: Utensils,
   'heart-pulse': HeartPulse,
   sparkles: Sparkles,
-  tv: Tv,
   gift: Gift,
-  briefcase: Briefcase,
-  'trending-up': TrendingUp,
-  'credit-card': CreditCard,
   wallet: Wallet,
+  banknote: Banknote,
+  'credit-card': CreditCard,
+  'trending-up': TrendingUp,
+  'trending-down': TrendingDown,
   'pie-chart': PieChart,
   archive: Archive,
   settings: Settings,
   plus: Plus,
-  'arrow-up': ArrowUpRight,
-  'arrow-down': ArrowDownLeft,
+  search: Search,
   calendar: Calendar,
-  clock: Clock,
-  tag: Tag,
-  user: User,
+  bell: Bell,
   users: Users,
-  check: Check,
-  trash: Trash2,
-  edit: Edit3,
-  download: Download,
-  upload: Upload,
+  tag: Tag,
+  lock: Lock,
   moon: Moon,
   sun: Sun,
-  search: Search,
-  filter: Filter,
-  'chevron-left': ChevronLeft,
-  'chevron-right': ChevronRight,
-  'chevron-down': ChevronDown,
-  'chevron-up': ChevronUp,
-  smartphone: Smartphone,
-  coffee: Coffee,
-  'shopping-cart': ShoppingCart,
-  fuel: Fuel,
-  stethoscope: Stethoscope,
-  scissors: Scissors,
-  plane: Plane,
-  book: BookOpen,
-  dollar: DollarSign,
-  award: Award,
-  layers: Layers,
-  lock: Lock,
+  download: Download,
   refresh: RefreshCw,
-  palette: Palette,
-  shuffle: Shuffle,
-  'message-square': MessageSquare,
-  clipboard: Clipboard,
-  package: Package,
-  link: Link2,
-  'file-text': FileText,
-  shield: ShieldCheck,
+  check: Check,
   x: X,
-  copy: Copy,
-  'rotate-ccw': RotateCcw,
+  'arrow-up-right': ArrowUpRight,
+  'arrow-down-left': ArrowDownLeft,
+  coffee: Coffee,
+  smartphone: Smartphone,
+  plane: Plane,
+  shield: Shield,
+  shirt: Shirt,
+  fuel: Fuel,
+  bus: Bus,
+  bike: Bike,
+  zap: Zap,
+  droplets: Droplets,
+  flame: Flame,
+  wifi: Wifi,
+  'graduation-cap': GraduationCap,
+  'book-open': BookOpen,
+  dumbbell: Dumbbell,
+  pill: Pill,
+  stethoscope: Stethoscope,
+  baby: Baby,
+  'paw-print': PawPrint,
+  wrench: Wrench,
+  briefcase: Briefcase,
+  laptop: Laptop,
+  'gamepad-2': Gamepad2,
+  film: Film,
+  music: Music,
+  camera: Camera,
+  scissors: Scissors,
+  landmark: Landmark,
+  coins: Coins,
+  'piggy-bank': PiggyBank,
+  receipt: Receipt,
+  umbrella: Umbrella,
+  trees: Trees,
+  watch: Watch,
+  gem: Gem,
+  package: Package,
+  store: Store,
+  'building-2': Building2,
+  sofa: Sofa,
+  hammer: Hammer,
+  ticket: Ticket,
+  'utensils-crossed': UtensilsCrossed,
 };
 
 export const AVAILABLE_ICONS: { id: IconName; label: string }[] = [
-  { id: 'shopping-cart', label: 'خرید روزمره' },
-  { id: 'utensils', label: 'رستوران و غذا' },
-  { id: 'coffee', label: 'کافه و تنقلات' },
-  { id: 'home', label: 'مسکن و خانه' },
-  { id: 'car', label: 'خودرو و تردد' },
-  { id: 'fuel', label: 'سوخت و بنزین' },
-  { id: 'heart-pulse', label: 'سلامت و درمان' },
-  { id: 'sparkles', label: 'پوشاک و زیبایی' },
-  { id: 'tv', label: 'تفریح و اشتراک' },
+  // خرید و خوراک
+  { id: 'shopping-cart', label: 'سوپرمارکت' },
+  { id: 'store', label: 'فروشگاه' },
+  { id: 'package', label: 'خرید آنلاین' },
+  { id: 'utensils', label: 'رستوران' },
+  { id: 'utensils-crossed', label: 'فست‌فود' },
+  { id: 'coffee', label: 'کافه و چای' },
+  { id: 'shirt', label: 'پوشاک و مد' },
+  { id: 'watch', label: 'اکسسوری' },
+  { id: 'gem', label: 'جواهرات' },
   { id: 'gift', label: 'هدیه و مناسبت' },
-  { id: 'smartphone', label: 'قبوض و اینترنت' },
-  { id: 'plane', label: 'سفر و گردشگری' },
-  { id: 'book', label: 'آموزش و کتاب' },
-  { id: 'briefcase', label: 'حقوق و دستمزد' },
-  { id: 'trending-up', label: 'سرمایه‌گذاری و سود' },
-  { id: 'award', label: 'پاداش و پروژه' },
+  // خانه و قبوض
+  { id: 'home', label: 'خانه و اجاره' },
+  { id: 'building-2', label: 'شارژ ساختمان' },
+  { id: 'sofa', label: 'لوازم منزل' },
+  { id: 'hammer', label: 'بازسازی' },
+  { id: 'wrench', label: 'تعمیرات' },
+  { id: 'zap', label: 'قبض برق' },
+  { id: 'droplets', label: 'قبض آب' },
+  { id: 'flame', label: 'قبض گاز' },
+  { id: 'wifi', label: 'اینترنت' },
+  { id: 'smartphone', label: 'موبایل و شارژ' },
+  // حمل‌ونقل و سفر
+  { id: 'car', label: 'خودرو' },
+  { id: 'fuel', label: 'بنزین و سوخت' },
+  { id: 'bus', label: 'حمل‌ونقل' },
+  { id: 'bike', label: 'پیک و دوچرخه' },
+  { id: 'plane', label: 'سفر و بلیط' },
+  // سلامت، ورزش و زیبایی
+  { id: 'heart-pulse', label: 'درمان و سلامت' },
+  { id: 'stethoscope', label: 'ویزیت پزشک' },
+  { id: 'pill', label: 'داروخانه' },
+  { id: 'dumbbell', label: 'ورزش و باشگاه' },
+  { id: 'scissors', label: 'آرایشگاه' },
+  { id: 'sparkles', label: 'زیبایی' },
+  { id: 'baby', label: 'کودک' },
+  { id: 'paw-print', label: 'حیوان خانگی' },
+  // آموزش، کار و دیجیتال
+  { id: 'graduation-cap', label: 'آموزش و کلاس' },
+  { id: 'book-open', label: 'کتاب و مطالعه' },
+  { id: 'briefcase', label: 'کار و درآمد' },
+  { id: 'laptop', label: 'لپ‌تاپ و گجت' },
+  // تفریح و فرهنگ
+  { id: 'film', label: 'سینما و فیلم' },
+  { id: 'music', label: 'موسیقی' },
+  { id: 'gamepad-2', label: 'بازی و سرگرمی' },
+  { id: 'camera', label: 'عکاسی و هنر' },
+  { id: 'ticket', label: 'بلیط و رویداد' },
+  { id: 'trees', label: 'طبیعت و پارک' },
+  // مالی، بانک و سرمایه‌گذاری
+  { id: 'wallet', label: 'کیف پول' },
+  { id: 'banknote', label: 'حقوق و نقد' },
+  { id: 'credit-card', label: 'کارت بانکی' },
+  { id: 'landmark', label: 'بانک و اقساط' },
+  { id: 'coins', label: 'طلا و سکه' },
+  { id: 'piggy-bank', label: 'پس‌انداز' },
+  { id: 'trending-up', label: 'سرمایه‌گذاری' },
+  { id: 'receipt', label: 'مالیات و عوارض' },
+  { id: 'umbrella', label: 'بیمه' },
+  { id: 'shield', label: 'امنیت و ضمانت' },
+  { id: 'tag', label: 'سایر موارد' },
+];
+
+export const CATEGORY_PALETTE_COLORS: string[] = [
+  '#10b981', // زمردی
+  '#059669', // سبز جنگلی
+  '#22c55e', // سبز روشن
+  '#84cc16', // لیمویی
+  '#14b8a6', // آبی‌سبز
+  '#06b6d4', // فیروزه‌ای
+  '#0ea5e9', // آبی آسمانی
+  '#3b82f6', // آبی کلاسیک
+  '#2563eb', // آبی کبالت
+  '#6366f1', // نیلی
+  '#8b5cf6', // بنفش
+  '#a855f7', // ارغوانی
+  '#d946ef', // سرخابی
+  '#ec4899', // صورتی
+  '#f43f5e', // رز یاقوتی
+  '#ef4444', // قرمز
+  '#dc2626', // زرشکی
+  '#f97316', // نارنجی
+  '#ea580c', // مرجانی تیره
+  '#f59e0b', // کهربایی
+  '#eab308', // طلایی
+  '#a16207', // برنزی
+  '#64748b', // خاکستری سرد
+  '#334155', // ذغالی
 ];
 
 interface CircularIconProps {
   name: string;
   color?: string;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-  variant?: 'soft' | 'solid' | 'outline' | 'glass';
+  variant?: 'soft' | 'solid' | 'glass';
   className?: string;
 }
 
@@ -221,67 +329,47 @@ export const CircularIcon: React.FC<CircularIconProps> = ({
   variant = 'soft',
   className = '',
 }) => {
-  const IconComponent = ICON_MAP[name] || Layers;
+  const IconComponent = ICON_MAP[name as IconName] || Tag;
 
-  const sizeClasses = {
-    xs: 'w-7 h-7',
-    sm: 'w-9 h-9',
-    md: 'w-11 h-11',
-    lg: 'w-13 h-13',
-    xl: 'w-16 h-16',
-  }[size];
+  const sizeMap = {
+    xs: { box: 'w-7 h-7', icon: 14 },
+    sm: { box: 'w-9 h-9', icon: 17 },
+    md: { box: 'w-11 h-11', icon: 20 },
+    lg: { box: 'w-13 h-13', icon: 24 },
+    xl: { box: 'w-16 h-16', icon: 28 },
+  };
 
-  const iconSizes = {
-    xs: 14,
-    sm: 17,
-    md: 20,
-    lg: 24,
-    xl: 28,
-  }[size];
+  const { box, icon } = sizeMap[size];
 
-  if (variant === 'solid') {
-    return (
-      <div
-        style={{ backgroundColor: color }}
-        className={`circular-icon-badge ${sizeClasses} rounded-full flex items-center justify-center shrink-0 text-white shadow-sm relative overflow-hidden ${className}`}
-      >
-        <div className="absolute inset-0 bg-gradient-to-tr from-black/15 to-white/20 pointer-events-none" />
-        <IconComponent size={iconSizes} strokeWidth={2.2} className="relative z-10" />
-      </div>
-    );
-  }
-
-  if (variant === 'glass') {
-    return (
-      <div
-        className={`circular-icon-badge ${sizeClasses} rounded-full flex items-center justify-center shrink-0 bg-white/20 backdrop-blur-md border border-white/30 text-white ${className}`}
-      >
-        <IconComponent size={iconSizes} strokeWidth={2.2} />
-      </div>
-    );
-  }
-
-  if (variant === 'outline') {
-    return (
-      <div
-        style={{ borderColor: `${color}40`, color }}
-        className={`circular-icon-badge ${sizeClasses} rounded-full flex items-center justify-center shrink-0 border-2 bg-transparent ${className}`}
-      >
-        <IconComponent size={iconSizes} strokeWidth={2.2} />
-      </div>
-    );
-  }
+  const getStyle = (): React.CSSProperties => {
+    if (variant === 'solid') {
+      return {
+        backgroundColor: color,
+        color: '#ffffff',
+        boxShadow: `0 6px 18px -4px ${color}66`,
+      };
+    }
+    if (variant === 'glass') {
+      return {
+        backgroundColor: 'rgba(255,255,255,0.16)',
+        color: '#ffffff',
+        border: '1px solid rgba(255,255,255,0.22)',
+      };
+    }
+    // Soft translucent circular badge
+    return {
+      backgroundColor: `${color}1f`,
+      color: color,
+      border: `1px solid ${color}33`,
+    };
+  };
 
   return (
-    <div
-      style={{
-        backgroundColor: `${color}18`,
-        color: color,
-        borderColor: `${color}30`,
-      }}
-      className={`circular-icon-badge ${sizeClasses} rounded-full flex items-center justify-center shrink-0 border relative ${className}`}
+    <span
+      style={getStyle()}
+      className={`${box} rounded-full inline-flex items-center justify-center shrink-0 transition-transform duration-200 ${className}`}
     >
-      <IconComponent size={iconSizes} strokeWidth={2.2} />
-    </div>
+      <IconComponent size={icon} strokeWidth={2.1} />
+    </span>
   );
 };

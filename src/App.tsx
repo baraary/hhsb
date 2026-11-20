@@ -35,13 +35,14 @@ import { HomeView } from './components/HomeView';
 import { CardsView } from './components/CardsView';
 import { StatsView } from './components/StatsView';
 import { ArchiveView } from './components/ArchiveView';
-import { SettingsView } from './components/SettingsView';
+import { SettingsView, SettingsSectionId } from './components/SettingsView';
 import { TransactionModal } from './components/TransactionModal';
 import { BankSmsModal } from './components/BankSmsModal';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { GlassPinPad } from './components/GlassPinPad';
 import {
   toEnglishDigits,
+  formatMoney,
   advanceJalaliDate,
   rewindJalaliDate,
   getCurrentJalaliDateStr,
@@ -50,6 +51,8 @@ import {
 import {
   isLikelyBankSms,
   computeSmsHash,
+  consumePendingNativeBankSms,
+  triggerNativeHaptic,
   NativeAndroidSmsItem,
 } from './utils/bankSmsParser';
 import {
@@ -319,10 +322,16 @@ export default function App() {
 
   const [activeTabIndex, setActiveTabIndex] = useState<number>(0);
   const [swipeDirection, setSwipeDirection] = useState<number>(0);
+  const [settingsRequestedSection, setSettingsRequestedSection] =
+    useState<SettingsSectionId | null>(null);
+  const [isSettingsSubPageOpen, setIsSettingsSubPageOpen] = useState<boolean>(false);
+  const [settingsResetHubSignal, setSettingsResetHubSignal] = useState<number>(0);
   const [isTxModalOpen, setIsTxModalOpen] = useState<boolean>(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [isBankSmsModalOpen, setIsBankSmsModalOpen] = useState<boolean>(false);
   const [initialBankSmsText, setInitialBankSmsText] = useState<string>('');
+  const [pendingQuickAction, setPendingQuickAction] = useState<'add_tx' | 'bank_sms' | null>(null);
+  const [pendingBackgroundSmsText, setPendingBackgroundSmsText] = useState<string>('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [syncErrorMessage, setSyncErrorMessage] = useState<string>('');
   const [undoToast, setUndoToast] = useState<{
@@ -1112,23 +1121,143 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [state, pushStateToRemote]);
 
-  // Listen for Native Android APK incoming Bank SMS & optional Auto-Clipboard detection
+  // Listen for Native Android APK incoming Bank SMS, Background Queue, Widget Quick Actions & Smart Back Button
   useEffect(() => {
+    const queueOrOpenSms = (bodyText: string) => {
+      if (!bodyText || !bodyText.trim()) return;
+      if (isUnlocked) {
+        setInitialBankSmsText(bodyText);
+        setIsBankSmsModalOpen(true);
+      } else {
+        setPendingBackgroundSmsText((prev) =>
+          prev ? `${prev}\n---\n${bodyText}` : bodyText
+        );
+      }
+    };
+
     window.onNativeBankSmsReceived = (smsJson: string) => {
       try {
         const item: NativeAndroidSmsItem = JSON.parse(smsJson);
         if (item?.body && isLikelyBankSms(item.body, item.address)) {
-          setInitialBankSmsText(item.body);
-          setIsBankSmsModalOpen(true);
+          queueOrOpenSms(item.body);
         }
       } catch {
         // ignore
       }
     };
+
+    window.onNativeQuickAction = (action: string) => {
+      if (action === 'add_tx' || action === 'bank_sms') {
+        if (isUnlocked) {
+          if (action === 'add_tx') {
+            setEditingTx(null);
+            setIsTxModalOpen(true);
+          } else {
+            setInitialBankSmsText('');
+            setIsBankSmsModalOpen(true);
+          }
+        } else {
+          setPendingQuickAction(action);
+        }
+      }
+    };
+
+    // Consume any pending SMS or widget quick action stored while app was closed/backgrounded
+    const pendingList = consumePendingNativeBankSms().filter(
+      (item) => item?.body && isLikelyBankSms(item.body, item.address)
+    );
+    if (pendingList.length > 0) {
+      const combined = pendingList.map((i) => i.body).join('\n---\n');
+      queueOrOpenSms(combined);
+    }
+
+    try {
+      const pendingAct = window.AndroidSmsBridge?.consumePendingQuickAction?.() || '';
+      if (pendingAct === 'add_tx' || pendingAct === 'bank_sms') {
+        window.onNativeQuickAction(pendingAct);
+      }
+    } catch {
+      // ignore
+    }
+
     return () => {
       window.onNativeBankSmsReceived = undefined;
+      window.onNativeQuickAction = undefined;
     };
-  }, []);
+  }, [isUnlocked]);
+
+  // Execute any queued background SMS or Widget Quick Action immediately after unlocking
+  useEffect(() => {
+    if (!isUnlocked) return;
+    if (pendingBackgroundSmsText) {
+      setInitialBankSmsText(pendingBackgroundSmsText);
+      setIsBankSmsModalOpen(true);
+      setPendingBackgroundSmsText('');
+      return;
+    }
+    if (pendingQuickAction === 'add_tx') {
+      setEditingTx(null);
+      setIsTxModalOpen(true);
+      setPendingQuickAction(null);
+    } else if (pendingQuickAction === 'bank_sms') {
+      setInitialBankSmsText('');
+      setIsBankSmsModalOpen(true);
+      setPendingQuickAction(null);
+    }
+  }, [isUnlocked, pendingBackgroundSmsText, pendingQuickAction]);
+
+  // Sync live financial summary to the Native Android Home Screen Widget
+  useEffect(() => {
+    if (typeof window.AndroidSmsBridge?.updateWidgetData !== 'function') return;
+    try {
+      const unit = state.settings.currencyUnit || 'ریال';
+      const todayStr = getCurrentJalaliDateStr();
+      const monthPrefix = todayStr.slice(0, 7);
+
+      const cardsInitial = (state.cards || []).reduce(
+        (sum, c) => sum + (c.initialBalance || 0),
+        0
+      );
+      const cashInitial = state.settings.initialCashBalance || 0;
+      let totalInc = 0;
+      let totalExp = 0;
+      let todayExp = 0;
+      let monthExp = 0;
+
+      for (const tx of state.transactions || []) {
+        if (tx.type === 'income') {
+          totalInc += tx.amount;
+        } else if (tx.type === 'expense') {
+          totalExp += tx.amount;
+          if (tx.jalaliDate === todayStr) todayExp += tx.amount;
+          if (tx.jalaliDate?.startsWith(monthPrefix)) monthExp += tx.amount;
+        }
+      }
+
+      const totalBalance = cardsInitial + cashInitial + totalInc - totalExp;
+      const balanceText = `${formatMoney(totalBalance)} ${unit}`;
+      const todayExpText = `${formatMoney(todayExp)} ${unit}`;
+      const monthExpText = `${formatMoney(monthExp)} ${unit}`;
+
+      window.AndroidSmsBridge.updateWidgetData(
+        state.settings.userName || activeUserObj.name || 'کاربر',
+        balanceText,
+        todayExpText,
+        monthExpText,
+        Boolean(state.settings.privacyMode)
+      );
+    } catch {
+      // ignore
+    }
+  }, [
+    state.transactions,
+    state.cards,
+    state.settings.initialCashBalance,
+    state.settings.currencyUnit,
+    state.settings.userName,
+    state.settings.privacyMode,
+    activeUserObj.name,
+  ]);
 
   useEffect(() => {
     if (!state.settings.autoCheckClipboardSms || !isUnlocked) return;
@@ -1139,6 +1268,7 @@ export default function App() {
           const hash = computeSmsHash(text);
           const alreadyDone =
             (state.importedSmsHashes || []).includes(hash) ||
+            (state.dismissedSmsHashes || []).includes(hash) ||
             state.transactions.some((t) => t.smsHash === hash);
           if (!alreadyDone) {
             setInitialBankSmsText(text);
@@ -1151,7 +1281,13 @@ export default function App() {
     };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [state.settings.autoCheckClipboardSms, state.importedSmsHashes, state.transactions, isUnlocked]);
+  }, [
+    state.settings.autoCheckClipboardSms,
+    state.importedSmsHashes,
+    state.dismissedSmsHashes,
+    state.transactions,
+    isUnlocked,
+  ]);
 
   // Sync Dark Mode, Color Theme & Mobile Status Bar / Android Navigation Bar Theme-Color
   useEffect(() => {
@@ -1159,13 +1295,28 @@ export default function App() {
     const mode =
       state.settings.themeMode || (state.settings.darkMode ? 'dark' : 'light');
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const lightMediaQuery = window.matchMedia('(prefers-color-scheme: light)');
     const isMono = state.settings.colorTheme === 'monochrome';
+
+    const resolveSystemIsDark = (): boolean => {
+      try {
+        if (typeof window.AndroidSmsBridge?.isSystemDarkMode === 'function') {
+          return Boolean(window.AndroidSmsBridge.isSystemDarkMode());
+        }
+      } catch {
+        // fallback to CSS media query
+      }
+      if (lightMediaQuery.matches) return false;
+      return mediaQuery.matches;
+    };
 
     const applyThemeAndSystemBars = (isDark: boolean) => {
       if (isDark) {
         root.classList.add('dark');
+        root.style.colorScheme = 'dark';
       } else {
         root.classList.remove('dark');
+        root.style.colorScheme = 'light';
       }
 
       // When the app is locked (Lock Screen), the screen background is always dark (#020617).
@@ -1207,13 +1358,43 @@ export default function App() {
     root.setAttribute('data-color-theme', state.settings.colorTheme || 'emerald');
 
     if (mode === 'system') {
-      applyThemeAndSystemBars(mediaQuery.matches);
-      const handleSystemChange = (e: MediaQueryListEvent) => {
-        applyThemeAndSystemBars(e.matches);
+      applyThemeAndSystemBars(resolveSystemIsDark());
+
+      const handleMediaChange = () => {
+        applyThemeAndSystemBars(resolveSystemIsDark());
       };
-      mediaQuery.addEventListener('change', handleSystemChange);
-      return () => mediaQuery.removeEventListener('change', handleSystemChange);
+      const handleVisibilityOrFocus = () => {
+        if (document.visibilityState !== 'hidden') {
+          applyThemeAndSystemBars(resolveSystemIsDark());
+        }
+      };
+
+      window.onNativeSystemThemeChanged = (isDark: boolean) => {
+        applyThemeAndSystemBars(Boolean(isDark));
+      };
+
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', handleMediaChange);
+        lightMediaQuery.addEventListener('change', handleMediaChange);
+      } else if (typeof mediaQuery.addListener === 'function') {
+        mediaQuery.addListener(handleMediaChange);
+      }
+      document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.addEventListener('focus', handleVisibilityOrFocus);
+
+      return () => {
+        window.onNativeSystemThemeChanged = undefined;
+        if (typeof mediaQuery.removeEventListener === 'function') {
+          mediaQuery.removeEventListener('change', handleMediaChange);
+          lightMediaQuery.removeEventListener('change', handleMediaChange);
+        } else if (typeof mediaQuery.removeListener === 'function') {
+          mediaQuery.removeListener(handleMediaChange);
+        }
+        document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+        window.removeEventListener('focus', handleVisibilityOrFocus);
+      };
     } else {
+      window.onNativeSystemThemeChanged = undefined;
       const isDark = mode === 'dark';
       applyThemeAndSystemBars(isDark);
     }
@@ -1226,6 +1407,7 @@ export default function App() {
 
   const handleTabChange = (newIndex: number) => {
     if (newIndex < 0 || newIndex >= TABS.length || newIndex === activeTabIndex) return;
+    triggerNativeHaptic('light');
     setSwipeDirection(newIndex > activeTabIndex ? 1 : -1);
     setActiveTabIndex(newIndex);
   };
@@ -1273,6 +1455,7 @@ export default function App() {
     txData: Omit<Transaction, 'id' | 'createdAt'>,
     existingId?: string
   ) => {
+    triggerNativeHaptic('confirm');
     hasUserEditedRef.current = true;
     const now = Date.now();
     setState((prev) => {
@@ -1324,6 +1507,30 @@ export default function App() {
         ),
       };
     });
+  };
+
+  const handleDismissSmsHash = (smsHash: string) => {
+    if (!smsHash) return;
+    hasUserEditedRef.current = true;
+    setState((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      dismissedSmsHashes: Array.from(
+        new Set([...(prev.dismissedSmsHashes || []), smsHash])
+      ),
+    }));
+  };
+
+  const handleRestoreDismissedSmsHash = (smsHash: string) => {
+    if (!smsHash) return;
+    hasUserEditedRef.current = true;
+    setState((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      dismissedSmsHashes: (prev.dismissedSmsHashes || []).filter(
+        (h) => h !== smsHash
+      ),
+    }));
   };
 
   const handleDeleteTransaction = (id: string) => {
@@ -1881,6 +2088,7 @@ export default function App() {
     setPinError(false);
     setPinErrorDetail('');
     setIsUnlocked(true);
+    triggerNativeHaptic('confirm');
   };
 
   // Interactive Touch-Hold Fingerprint Scanner Modal State (for Android APK WebView)
@@ -1889,6 +2097,56 @@ export default function App() {
     targetUser: UserAccount;
     isSwitchModal?: boolean;
   } | null>(null);
+
+  // Smart Native Android Back Button handler (closes open modals/dropdowns or returns to Home before exiting)
+  useEffect(() => {
+    window.onNativeAndroidBackPressed = () => {
+      if (touchScannerRequest) {
+        setTouchScannerRequest(null);
+        return 'handled';
+      }
+      if (switchTargetUserId) {
+        setSwitchTargetUserId(null);
+        return 'handled';
+      }
+      if (isTxModalOpen) {
+        setIsTxModalOpen(false);
+        setEditingTx(null);
+        return 'handled';
+      }
+      if (isBankSmsModalOpen) {
+        setIsBankSmsModalOpen(false);
+        setInitialBankSmsText('');
+        return 'handled';
+      }
+      if (isUserSwitcherOpen) {
+        setIsUserSwitcherOpen(false);
+        return 'handled';
+      }
+      if (isUnlocked && activeTabIndex === 4 && isSettingsSubPageOpen) {
+        setSettingsResetHubSignal((prev) => prev + 1);
+        return 'handled';
+      }
+      if (isUnlocked && activeTabIndex !== 0) {
+        setSwipeDirection(-1);
+        setActiveTabIndex(0);
+        return 'handled';
+      }
+      return 'exit';
+    };
+    return () => {
+      window.onNativeAndroidBackPressed = undefined;
+    };
+  }, [
+    touchScannerRequest,
+    switchTargetUserId,
+    isTxModalOpen,
+    isBankSmsModalOpen,
+    isUserSwitcherOpen,
+    isUnlocked,
+    activeTabIndex,
+    isSettingsSubPageOpen,
+  ]);
   const [scannerProgress, setScannerProgress] = useState(0);
   const scannerIntervalRef = useRef<number | null>(null);
 
@@ -2705,7 +2963,10 @@ export default function App() {
             {activeTabIndex === 2 && (
               <StatsView
                 state={state}
-                onNavigateSettingsBudgets={() => handleTabChange(4)}
+                onNavigateSettingsBudgets={() => {
+                  setSettingsRequestedSection('budgets');
+                  handleTabChange(4);
+                }}
               />
             )}
 
@@ -2746,6 +3007,10 @@ export default function App() {
                 }}
                 syncStatus={syncStatus}
                 syncErrorMessage={syncErrorMessage}
+                requestedSection={settingsRequestedSection}
+                onConsumeRequestedSection={() => setSettingsRequestedSection(null)}
+                onSubPageOpenChange={setIsSettingsSubPageOpen}
+                resetToHubSignal={settingsResetHubSignal}
               />
             )}
           </motion.div>
@@ -2949,6 +3214,8 @@ export default function App() {
           state={state}
           onSave={handleSaveTransaction}
           onDelete={handleDeleteTransaction}
+          onSaveCategory={handleSaveCategory}
+          onSaveTag={handleSaveTag}
           editingTransaction={editingTx}
         />
 
@@ -2960,9 +3227,13 @@ export default function App() {
           }}
           state={state}
           onImportTransactions={handleImportBankSmsTransactions}
+          onDismissSms={handleDismissSmsHash}
+          onRestoreDismissedSms={handleRestoreDismissedSmsHash}
           onUpdateAutoCheckClipboard={(enabled) =>
             handleUpdateSettings({ autoCheckClipboardSms: enabled })
           }
+          onSaveCategory={handleSaveCategory}
+          onSaveTag={handleSaveTag}
           initialRawSms={initialBankSmsText}
         />
         {touchScannerModalPortal}

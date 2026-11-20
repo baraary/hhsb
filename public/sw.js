@@ -39,12 +39,17 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
 
-  // Never cache GitHub API, raw GitHub DB files, or /api/sync so live sync is always fresh
+  // Never cache GitHub API, raw GitHub DB files, /api/sync, or Vite dev endpoints
   if (
     url.hostname.includes('api.github.com') ||
     url.hostname.includes('raw.githubusercontent.com') ||
     url.pathname.includes('/api/sync') ||
-    url.pathname.endsWith('hamhesab-db.json')
+    url.pathname.endsWith('hamhesab-db.json') ||
+    url.pathname.startsWith('/@vite') ||
+    url.pathname.startsWith('/@fs') ||
+    url.pathname.startsWith('/@react-refresh') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/')
   ) {
     return;
   }
@@ -77,6 +82,12 @@ self.addEventListener('fetch', (event) => {
         }
         return res;
       })
-      .catch(() => caches.match(req).then((cached) => cached || caches.match('./index.html')))
+      .catch(() =>
+        caches.match(req).then((cached) => {
+          if (cached) return cached;
+          if (req.mode === 'navigate') return caches.match('./index.html');
+          return Response.error();
+        })
+      )
   );
 });
